@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<launch>
+  <!-- MORAI status ROS input -->
+  <arg name="ego_status_topic" default="/morai/ego_vehicle_status" />
+
+  <!-- Control outputs -->
+  <arg name="heading_topic" default="/heading" />
+  <arg name="current_speed_topic" default="/current_speed" />
+  <arg name="status_valid_topic" default="/vehicle_status_valid" />
+  <arg name="status_timeout" default="0.5" />
+
+  <!-- MORAI UDP EgoVehicleStatus input units. Outputs are /heading rad and /current_speed m/s. -->
+  <arg name="heading_input_unit" default="deg" />
+  <arg name="speed_input_unit" default="kph" />
+
+  <node name="control_status_adapter" pkg="global_path_planner" type="control_status_adapter.py" output="screen" respawn="true">
+    <param name="ego_status_topic" value="$(arg ego_status_topic)" type="str" />
+    <param name="heading_topic" value="$(arg heading_topic)" type="str" />
+    <param name="current_speed_topic" value="$(arg current_speed_topic)" type="str" />
+    <param name="status_valid_topic" value="$(arg status_valid_topic)" type="str" />
+    <param name="status_timeout" value="$(arg status_timeout)" type="double" />
+    <param name="heading_input_unit" value="$(arg heading_input_unit)" type="str" />
+    <param name="speed_input_unit" value="$(arg speed_input_unit)" type="str" />
+  </node>
+</launch>

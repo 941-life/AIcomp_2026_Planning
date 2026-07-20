@@ -8,6 +8,7 @@ find_package(catkin REQUIRED COMPONENTS
   katri_msgs
   nav_msgs
   roscpp
+  roslib
   rospy
   sensor_msgs
   std_msgs
@@ -23,6 +24,7 @@ catkin_package(
     katri_msgs
     nav_msgs
     roscpp
+    roslib
     rospy
     sensor_msgs
     std_msgs
@@ -49,6 +51,7 @@ add_dependencies(region_state_publisher ${catkin_EXPORTED_TARGETS})
 target_link_libraries(region_state_publisher ${catkin_LIBRARIES} ${OpenCV_LIBS})
 
 catkin_install_python(PROGRAMS
+  scripts/control_status_adapter.py
   scripts/global_path_publisher.py
   scripts/ll2utm.py
   scripts/path_maker_sm.py
