@@ -28,13 +28,18 @@ class make_path:
         filename = rospy.get_param("~file_name", filename)
         self.closed_loop = rospy.get_param("~closed_loop", self.closed_loop)
         self.closed_loop_radius = float(rospy.get_param("~closed_loop_radius", self.closed_loop_radius))
+        self.sample_distance = float(rospy.get_param("~sample_distance", self.sample_distance))
+        self.smoothing_factor = float(rospy.get_param("~smoothing_factor", self.smoothing_factor))
+        self.odom_topic = rospy.get_param("~odom_topic", "gps_utm_odom")
+        self.path_topic = rospy.get_param("~path_topic", "/local_path")
+        self.frame_id = rospy.get_param("~frame_id", "map")
         if not filename.endswith(".txt"):
             filename = filename + ".txt"
-        rospy.Subscriber("gps_utm_odom", Odometry, self.odom_callback)
-        self.path_pub = rospy.Publisher('/local_path', Path, queue_size=1)
+        rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback)
+        self.path_pub = rospy.Publisher(self.path_topic, Path, queue_size=1)
         self.is_odom = False
         self.path_msg = Path()
-        self.path_msg.header.frame_id = 'map'
+        self.path_msg.header.frame_id = self.frame_id
         self.prev_x = 0
         self.prev_y = 0
         self.positions = []

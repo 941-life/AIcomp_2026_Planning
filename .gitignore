@@ -1,7 +1,15 @@
 __pycache__/
 *.py[cod]
+*.bag
+*.log
+*.zip
 build/
 devel/
 install/
 logs/
 .catkin_tools/
+/ai_comp_2026-master/
+/대회규정.txt
+global_path_planner/path_data/plot/
+ai_comp_2026-master/
+대회규정.txt

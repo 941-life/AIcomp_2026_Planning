@@ -1,11 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <launch>
-  <!-- path_maker가 저장할 파일명과 폐곡선 smoothing 여부를 설정한다. -->
+  <!-- path_maker가 저장할 파일명, 폐곡선 smoothing 여부 -->
   <arg name="path_file_name" default="path.txt" />
   <arg name="closed_loop" default="true" />
   <arg name="closed_loop_radius" default="1.0" />
+  <arg name="path_maker_odom_topic" default="/gps_utm_odom" />
+  <arg name="path_maker_path_topic" default="/local_path" />
+  <arg name="path_maker_frame_id" default="map" />
+  <arg name="path_maker_sample_distance" default="0.1" />
+  <arg name="path_maker_smoothing_factor" default="0.1" />
 
-  <!-- ll2utm 노드의 좌표 변환 파라미터를 설정한다. -->
+  <!-- ll2utm 노드의 좌표 변환 파라미터 -->
   <arg name="ll2utm_gps_topic" default="/gps" />
   <arg name="ll2utm_odom_topic" default="/gps_utm_odom" />
   <arg name="ll2utm_map_frame_id" default="map" />
@@ -34,7 +39,7 @@
   <arg name="ll2utm_gps_offset_y" default="0.0" />
   <arg name="ll2utm_max_speed_mps" default="30.0" />
 
-  <!-- GPS 좌표를 UTM odometry로 변환하는 ll2utm 노드를 실행한다. -->
+  <!-- GPS 좌표를 UTM Odometry로 변환 -->
   <node name="ll2utm" pkg="global_path_planner" type="ll2utm.py" respawn="true">
     <param name="gps_topic" value="$(arg ll2utm_gps_topic)" type="str" />
     <param name="odom_topic" value="$(arg ll2utm_odom_topic)" type="str" />
@@ -65,10 +70,15 @@
     <param name="max_speed_mps" value="$(arg ll2utm_max_speed_mps)" type="double" />
   </node>
 
-  <!-- UTM odometry를 받아 경로 파일을 기록하고 종료 시 smoothing 결과를 저장한다. -->
+  <!-- UTM Odometry를 기록하고 종료 시 smoothing된 경로를 저장 -->
   <node name="path_maker" pkg="global_path_planner" type="path_maker_sm.py" output="screen">
     <param name="file_name" value="$(arg path_file_name)" type="str" />
     <param name="closed_loop" value="$(arg closed_loop)" type="bool" />
     <param name="closed_loop_radius" value="$(arg closed_loop_radius)" type="double" />
+    <param name="odom_topic" value="$(arg path_maker_odom_topic)" type="str" />
+    <param name="path_topic" value="$(arg path_maker_path_topic)" type="str" />
+    <param name="frame_id" value="$(arg path_maker_frame_id)" type="str" />
+    <param name="sample_distance" value="$(arg path_maker_sample_distance)" type="double" />
+    <param name="smoothing_factor" value="$(arg path_maker_smoothing_factor)" type="double" />
   </node>
 </launch>
