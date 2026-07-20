@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="utf-8"?>
+<launch>
+  <!-- Common topics and frames -->
+  <arg name="gps_topic" default="/gps" />
+  <arg name="odom_topic" default="/gps_utm_odom" />
+  <arg name="map_frame_id" default="map" />
+  <arg name="base_frame_id" default="base_link" />
+  <arg name="global_path1_topic" default="/global_path1" />
+  <arg name="global_path2_topic" default="/global_path2" />
+  <arg name="local_path1_topic" default="/local_path1" />
+  <arg name="local_path2_topic" default="/local_path2" />
+  <arg name="current_path_topic" default="/current_path" />
+  <arg name="lane_path_topic" default="/lane_path" />
+  <arg name="state_topic" default="/state" />
+  <arg name="sign_state_topic" default="/sign_state" />
+  <arg name="selected_path_topic" default="/selected_path" />
+  <arg name="moving_obs_topic" default="/moving_obs" />
+  <arg name="traffic_light_topic" default="/traffic_light_state" />
+  <arg name="gps_quat_topic" default="/gphdt_quat_pub" />
+  <arg name="objects_topic" default="/obstacle_path_info" />
+
+  <!-- Map files and region selection -->
+  <arg name="region_map_yaml" default="$(find global_path_planner)/map_data/region_map.yaml" />
+  <arg name="global_map_yaml" default="$(find global_path_planner)/map_data/global_map.yaml" />
+  <arg name="region_name" default="final" />
+  <arg name="region_image_path" default="" />
+  <arg name="region_map_service" default="/region_map/static_map" />
+
+  <!-- ll2utm parameters -->
+  <arg name="ll2utm_utm_zone" default="52" />
+  <arg name="ll2utm_east_offset" default="0.0" />
+  <arg name="ll2utm_north_offset" default="0.0" />
+  <arg name="ll2utm_use_msg_offset" default="false" />
+  <arg name="ll2utm_require_valid_status" default="false" />
+  <arg name="ll2utm_min_gps_status" default="0" />
+  <arg name="ll2utm_publish_rate_hz" default="50.0" />
+  <arg name="ll2utm_enable_prediction" default="true" />
+  <arg name="ll2utm_max_prediction_time_s" default="0.10" />
+  <arg name="ll2utm_gps_timeout_s" default="0.5" />
+  <arg name="ll2utm_heading_filter_alpha" default="1.0" />
+  <arg name="ll2utm_velocity_filter_alpha" default="1.0" />
+  <arg name="ll2utm_initial_heading_distance" default="0.01" />
+  <arg name="ll2utm_min_heading_distance" default="0.01" />
+  <arg name="ll2utm_min_heading_speed_mps" default="0.03" />
+  <arg name="ll2utm_enable_heading_prediction" default="true" />
+  <arg name="ll2utm_heading_prediction_time_s" default="0.10" />
+  <arg name="ll2utm_yaw_rate_filter_alpha" default="1.0" />
+  <arg name="ll2utm_max_yaw_rate_radps" default="2.5" />
+  <arg name="ll2utm_apply_gps_offset" default="true" />
+  <arg name="ll2utm_gps_offset_x" default="0.0" />
+  <arg name="ll2utm_gps_offset_y" default="0.0" />
+  <arg name="ll2utm_max_speed_mps" default="30.0" />
+
+  <!-- Global path publisher parameters -->
+  <arg name="global_path1_package_name" default="global_path_planner" />
+  <arg name="global_path1_folder_name" default="path_data" />
+  <arg name="global_path1_file_name" default="path_sm" />
+  <arg name="global_path1_frame_id" default="map" />
+  <arg name="global_path1_latch" default="true" />
+  <arg name="global_path1_republish_hz" default="0.0" />
+
+  <arg name="global_path2_package_name" default="global_path_planner" />
+  <arg name="global_path2_folder_name" default="path_data" />
+  <arg name="global_path2_file_name" default="path_sm" />
+  <arg name="global_path2_frame_id" default="map" />
+  <arg name="global_path2_latch" default="true" />
+  <arg name="global_path2_republish_hz" default="0.0" />
+
+  <!-- Odom path publisher parameters -->
+  <arg name="odom_path_rate_hz" default="50.0" />
+  <arg name="odom_path_waypoint_interval" default="0.1" />
+  <arg name="odom_path_back_distance" default="2.0" />
+  <arg name="odom_path_front_distance" default="50.0" />
+  <arg name="odom_path_window_back" default="10" />
+  <arg name="odom_path_window_fwd" default="100" />
+  <arg name="odom_path_is_circular_path" default="false" />
+  <arg name="odom_path_teleport_ego_dist_thresh" default="5.0" />
+  <arg name="odom_path_max_valid_nearest_dist" default="30.0" />
+  <arg name="odom_path_distance_weight" default="1.0" />
+  <arg name="odom_path_angle_weight" default="5.0" />
+  <arg name="odom_path_forward_dot_min" default="0.0" />
+  <arg name="odom_path_path_heading_dot_min" default="0.0" />
+  <arg name="odom_path_switch_margin_cost" default="2.0" />
+  <arg name="odom_path_min_switch_interval_s" default="0.5" />
+  <arg name="odom_path_better_count_required" default="3" />
+
+  <!-- Local path selector parameters -->
+  <arg name="local_selector_rate_hz" default="20.0" />
+  <arg name="local_selector_obs_dist_threshold" default="20.0" />
+  <arg name="local_selector_slow_down_dist" default="16.0" />
+  <arg name="local_selector_stop_dist" default="9.0" />
+  <arg name="local_selector_lane_change_interpolate_length" default="2.0" />
+  <arg name="local_selector_lane_change_interpolate_points" default="10" />
+  <arg name="local_selector_subscribe_queue_size" default="10" />
+  <arg name="local_selector_publish_queue_size" default="1" />
+  <arg name="local_selector_debug_print" default="true" />
+
+  <!-- Region state publisher parameters -->
+  <arg name="region_state_rate_hz" default="10.0" />
+  <arg name="region_state_subscribe_queue_size" default="10" />
+  <arg name="region_state_publish_queue_size" default="1" />
+  <arg name="region_state_gps_cov_x_threshold" default="3.0" />
+  <arg name="region_state_gps_cov_y_threshold" default="3.0" />
+  <arg name="region_state_gps_cov_z_threshold" default="10.0" />
+
+  <group ns="region_map">
+    <node name="map_server" pkg="map_server" type="map_server" args="$(arg region_map_yaml)" />
+  </group>
+
+  <group ns="global_map">
+    <node name="map_server" pkg="map_server" type="map_server" args="$(arg global_map_yaml)" />
+  </group>
+
+  <node name="ll2utm" pkg="global_path_planner" type="ll2utm.py" respawn="true">
+    <param name="gps_topic" value="$(arg gps_topic)" type="str" />
+    <param name="odom_topic" value="$(arg odom_topic)" type="str" />
+    <param name="map_frame_id" value="$(arg map_frame_id)" type="str" />
+    <param name="base_frame_id" value="$(arg base_frame_id)" type="str" />
+    <param name="utm_zone" value="$(arg ll2utm_utm_zone)" type="int" />
+    <param name="east_offset" value="$(arg ll2utm_east_offset)" type="double" />
+    <param name="north_offset" value="$(arg ll2utm_north_offset)" type="double" />
+    <param name="use_msg_offset" value="$(arg ll2utm_use_msg_offset)" type="bool" />
+    <param name="require_valid_status" value="$(arg ll2utm_require_valid_status)" type="bool" />
+    <param name="min_gps_status" value="$(arg ll2utm_min_gps_status)" type="int" />
+    <param name="publish_rate_hz" value="$(arg ll2utm_publish_rate_hz)" type="double" />
+    <param name="enable_prediction" value="$(arg ll2utm_enable_prediction)" type="bool" />
+    <param name="max_prediction_time_s" value="$(arg ll2utm_max_prediction_time_s)" type="double" />
+    <param name="gps_timeout_s" value="$(arg ll2utm_gps_timeout_s)" type="double" />
+    <param name="heading_filter_alpha" value="$(arg ll2utm_heading_filter_alpha)" type="double" />
+    <param name="velocity_filter_alpha" value="$(arg ll2utm_velocity_filter_alpha)" type="double" />
+    <param name="initial_heading_distance" value="$(arg ll2utm_initial_heading_distance)" type="double" />
+    <param name="min_heading_distance" value="$(arg ll2utm_min_heading_distance)" type="double" />
+    <param name="min_heading_speed_mps" value="$(arg ll2utm_min_heading_speed_mps)" type="double" />
+    <param name="enable_heading_prediction" value="$(arg ll2utm_enable_heading_prediction)" type="bool" />
+    <param name="heading_prediction_time_s" value="$(arg ll2utm_heading_prediction_time_s)" type="double" />
+    <param name="yaw_rate_filter_alpha" value="$(arg ll2utm_yaw_rate_filter_alpha)" type="double" />
+    <param name="max_yaw_rate_radps" value="$(arg ll2utm_max_yaw_rate_radps)" type="double" />
+    <param name="apply_gps_offset" value="$(arg ll2utm_apply_gps_offset)" type="bool" />
+    <param name="gps_offset_x" value="$(arg ll2utm_gps_offset_x)" type="double" />
+    <param name="gps_offset_y" value="$(arg ll2utm_gps_offset_y)" type="double" />
+    <param name="max_speed_mps" value="$(arg ll2utm_max_speed_mps)" type="double" />
+  </node>
+
+  <node name="global_path_publisher1" pkg="global_path_planner" type="global_path_publisher.py" respawn="true">
+    <param name="package_name" value="$(arg global_path1_package_name)" type="str" />
+    <param name="folder_name" value="$(arg global_path1_folder_name)" type="str" />
+    <param name="file_name" value="$(arg global_path1_file_name)" type="str" />
+    <param name="topic_name" value="$(arg global_path1_topic)" type="str" />
+    <param name="frame_id" value="$(arg global_path1_frame_id)" type="str" />
+    <param name="latch" value="$(arg global_path1_latch)" type="bool" />
+    <param name="republish_hz" value="$(arg global_path1_republish_hz)" type="double" />
+  </node>
+
+  <node name="global_path_publisher2" pkg="global_path_planner" type="global_path_publisher.py" respawn="true">
+    <param name="package_name" value="$(arg global_path2_package_name)" type="str" />
+    <param name="folder_name" value="$(arg global_path2_folder_name)" type="str" />
+    <param name="file_name" value="$(arg global_path2_file_name)" type="str" />
+    <param name="topic_name" value="$(arg global_path2_topic)" type="str" />
+    <param name="frame_id" value="$(arg global_path2_frame_id)" type="str" />
+    <param name="latch" value="$(arg global_path2_latch)" type="bool" />
+    <param name="republish_hz" value="$(arg global_path2_republish_hz)" type="double" />
+  </node>
+
+  <node name="odom_path_publisher" pkg="global_path_planner" type="odom_path_publisher" respawn="true">
+    <param name="odom_topic" value="$(arg odom_topic)" type="str" />
+    <param name="global_path1_topic" value="$(arg global_path1_topic)" type="str" />
+    <param name="global_path2_topic" value="$(arg global_path2_topic)" type="str" />
+    <param name="local_path1_topic" value="$(arg local_path1_topic)" type="str" />
+    <param name="local_path2_topic" value="$(arg local_path2_topic)" type="str" />
+    <param name="current_path_topic" value="$(arg current_path_topic)" type="str" />
+    <param name="local_frame_id" value="$(arg base_frame_id)" type="str" />
+    <param name="rate_hz" value="$(arg odom_path_rate_hz)" type="double" />
+    <param name="waypoint_interval" value="$(arg odom_path_waypoint_interval)" type="double" />
+    <param name="back_distance" value="$(arg odom_path_back_distance)" type="double" />
+    <param name="front_distance" value="$(arg odom_path_front_distance)" type="double" />
+    <param name="window_back" value="$(arg odom_path_window_back)" type="int" />
+    <param name="window_fwd" value="$(arg odom_path_window_fwd)" type="int" />
+    <param name="is_circular_path" value="$(arg odom_path_is_circular_path)" type="bool" />
+    <param name="teleport_ego_dist_thresh" value="$(arg odom_path_teleport_ego_dist_thresh)" type="double" />
+    <param name="max_valid_nearest_dist" value="$(arg odom_path_max_valid_nearest_dist)" type="double" />
+    <param name="distance_weight" value="$(arg odom_path_distance_weight)" type="double" />
+    <param name="angle_weight" value="$(arg odom_path_angle_weight)" type="double" />
+    <param name="forward_dot_min" value="$(arg odom_path_forward_dot_min)" type="double" />
+    <param name="path_heading_dot_min" value="$(arg odom_path_path_heading_dot_min)" type="double" />
+    <param name="switch_margin_cost" value="$(arg odom_path_switch_margin_cost)" type="double" />
+    <param name="min_switch_interval_s" value="$(arg odom_path_min_switch_interval_s)" type="double" />
+    <param name="better_count_required" value="$(arg odom_path_better_count_required)" type="int" />
+  </node>
+
+  <node name="local_path_selector" pkg="global_path_planner" type="local_path_selector" respawn="true" output="screen">
+    <param name="lane_path_topic" value="$(arg lane_path_topic)" type="str" />
+    <param name="local_path1_topic" value="$(arg local_path1_topic)" type="str" />
+    <param name="local_path2_topic" value="$(arg local_path2_topic)" type="str" />
+    <param name="current_path_topic" value="$(arg current_path_topic)" type="str" />
+    <param name="state_topic" value="$(arg state_topic)" type="str" />
+    <param name="sign_state_topic" value="$(arg sign_state_topic)" type="str" />
+    <param name="objects_topic" value="$(arg objects_topic)" type="str" />
+    <param name="selected_path_topic" value="$(arg selected_path_topic)" type="str" />
+    <param name="moving_obs_topic" value="$(arg moving_obs_topic)" type="str" />
+    <param name="obs_dist_threshold" value="$(arg local_selector_obs_dist_threshold)" type="double" />
+    <param name="slow_down_dist" value="$(arg local_selector_slow_down_dist)" type="double" />
+    <param name="stop_dist" value="$(arg local_selector_stop_dist)" type="double" />
+    <param name="rate_hz" value="$(arg local_selector_rate_hz)" type="double" />
+    <param name="lane_change_interpolate_length" value="$(arg local_selector_lane_change_interpolate_length)" type="double" />
+    <param name="lane_change_interpolate_points" value="$(arg local_selector_lane_change_interpolate_points)" type="int" />
+    <param name="subscribe_queue_size" value="$(arg local_selector_subscribe_queue_size)" type="int" />
+    <param name="publish_queue_size" value="$(arg local_selector_publish_queue_size)" type="int" />
+    <param name="debug_print" value="$(arg local_selector_debug_print)" type="bool" />
+  </node>
+
+  <node name="region_state_publisher" pkg="global_path_planner" type="region_state_publisher" respawn="true">
+    <param name="region_name" value="$(arg region_name)" type="str" />
+    <param name="region_image_path" value="$(arg region_image_path)" type="str" />
+    <param name="state_topic" value="$(arg state_topic)" type="str" />
+    <param name="traffic_light_topic" value="$(arg traffic_light_topic)" type="str" />
+    <param name="odom_topic" value="$(arg odom_topic)" type="str" />
+    <param name="gps_quat_topic" value="$(arg gps_quat_topic)" type="str" />
+    <param name="region_map_service" value="$(arg region_map_service)" type="str" />
+    <param name="rate_hz" value="$(arg region_state_rate_hz)" type="double" />
+    <param name="subscribe_queue_size" value="$(arg region_state_subscribe_queue_size)" type="int" />
+    <param name="publish_queue_size" value="$(arg region_state_publish_queue_size)" type="int" />
+    <param name="gps_cov_x_threshold" value="$(arg region_state_gps_cov_x_threshold)" type="double" />
+    <param name="gps_cov_y_threshold" value="$(arg region_state_gps_cov_y_threshold)" type="double" />
+    <param name="gps_cov_z_threshold" value="$(arg region_state_gps_cov_z_threshold)" type="double" />
+  </node>
+</launch>
