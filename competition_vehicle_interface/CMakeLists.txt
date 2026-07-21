@@ -3,19 +3,23 @@ project(competition_vehicle_interface)
 
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
+  morai_msgs
   rospy
+  sensor_msgs
   std_msgs
 )
 
 catkin_package(
   CATKIN_DEPENDS
     geometry_msgs
+    morai_msgs
     rospy
+    sensor_msgs
     std_msgs
 )
 
 catkin_install_python(PROGRAMS
-  scripts/competition_vehicle_status_bridge.py
+  scripts/competition_morai_udp_bridge.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

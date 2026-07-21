@@ -10,6 +10,8 @@ from dataclasses import dataclass
 
 import rospy
 from geometry_msgs.msg import Vector3Stamped
+from morai_msgs.msg import GPSMessage
+from sensor_msgs.msg import Imu
 from std_msgs.msg import Bool, Float64, Header, Int8
 
 
@@ -125,6 +127,34 @@ class UdpEgoVehicleStatus26(PackedStruct):
     ]
 
 
+class UdpGpsPacket(PackedStruct):
+    _fields_ = [
+        ("header", ctypes.c_char * 6),
+        ("data", ctypes.c_char * 1022),
+    ]
+
+
+class UdpImuPacket(PackedStruct):
+    _fields_ = [
+        ("header", ctypes.c_char * 9),
+        ("data_lenght", ctypes.c_int32),
+        ("aux_data", ctypes.c_int32 * 3),
+        ("sec", ctypes.c_int32),
+        ("nsec", ctypes.c_int32),
+        ("ori_w", ctypes.c_double),
+        ("ori_x", ctypes.c_double),
+        ("ori_y", ctypes.c_double),
+        ("ori_z", ctypes.c_double),
+        ("ang_vel_x", ctypes.c_double),
+        ("ang_vel_y", ctypes.c_double),
+        ("ang_vel_z", ctypes.c_double),
+        ("lin_acc_x", ctypes.c_double),
+        ("lin_acc_y", ctypes.c_double),
+        ("lin_acc_z", ctypes.c_double),
+        ("tail", ctypes.c_char * 2),
+    ]
+
+
 @dataclass
 class ParsedVehicleStatus:
     stamp_sec: int
@@ -151,9 +181,26 @@ class ParsedVehicleStatus:
     brake: float
 
 
+@dataclass
+class ParsedGps:
+    stamp: rospy.Time
+    latitude: float
+    longitude: float
+    altitude: float
+    status: int
+
+
 def _packet_stamp(parsed):
     if parsed.stamp_sec > 0 and 0 <= parsed.stamp_nsec < 1000000000:
         return rospy.Time(parsed.stamp_sec, parsed.stamp_nsec)
+    return rospy.Time.now()
+
+
+def _stamp_from_sec_nsec(sec, nsec):
+    sec = int(sec)
+    nsec = int(nsec)
+    if sec > 0 and 0 <= nsec < 1000000000:
+        return rospy.Time(sec, nsec)
     return rospy.Time.now()
 
 
@@ -164,6 +211,34 @@ def _bool_param(param_name, default):
     if isinstance(value, (int, float)):
         return bool(value)
     return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _parse_nmea_degrees(value, direction):
+    if not value:
+        return None
+
+    raw = float(value)
+    degrees = int(raw / 100.0)
+    minutes = raw - degrees * 100.0
+    decimal = degrees + minutes / 60.0
+
+    if direction in ("S", "W"):
+        decimal = -decimal
+    return decimal
+
+
+def _parse_float(value, default=0.0):
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+
+def _parse_int(value, default=0):
+    try:
+        return int(float(value))
+    except Exception:
+        return default
 
 
 def _normalize_angle_rad(angle):
@@ -190,6 +265,25 @@ def _valid_packet(raw, expected_size, stream_name, strict_markers):
     return True
 
 
+def _valid_imu_packet(raw, expected_size, strict_markers):
+    if len(raw) != expected_size:
+        rospy.logwarn_throttle(
+            5.0,
+            "IMU packet size mismatch: got %d bytes, expected %d bytes",
+            len(raw),
+            expected_size,
+        )
+        return False
+
+    if not strict_markers:
+        return True
+
+    if raw[0] != 0x23 or raw[-2:] != b"\r\n":
+        rospy.logwarn_throttle(5.0, "IMU packet marker check failed")
+        return False
+    return True
+
+
 def _check_data_length(packet, raw_len, header_len, stream_name, strict_data_length):
     declared = int(packet.data_lenght)
     actual = raw_len - header_len - ctypes.sizeof(ctypes.c_int32) - ctypes.sizeof(ctypes.c_int32) * 3 - 2
@@ -207,7 +301,8 @@ def _check_data_length(packet, raw_len, header_len, stream_name, strict_data_len
 
 
 class UdpReceiver:
-    def __init__(self, bind_ip, bind_port, callback):
+    def __init__(self, stream_name, bind_ip, bind_port, callback):
+        self.stream_name = stream_name
         self.bind_ip = bind_ip
         self.bind_port = bind_port
         self.callback = callback
@@ -219,11 +314,11 @@ class UdpReceiver:
         self.socket.settimeout(0.2)
         self.socket.bind((self.bind_ip, self.bind_port))
 
-        self.thread = threading.Thread(target=self._run, name="competition_vehicle_status_udp", daemon=True)
+        self.thread = threading.Thread(target=self._run, name="{}_udp".format(stream_name), daemon=True)
 
     def start(self):
         self.thread.start()
-        rospy.loginfo("[competition_vehicle_status_bridge] UDP receiver bound to %s:%d", self.bind_ip, self.bind_port)
+        rospy.loginfo("[competition_morai_udp_bridge] %s UDP receiver bound to %s:%d", self.stream_name, self.bind_ip, self.bind_port)
 
     def close(self):
         self.closed = True
@@ -240,40 +335,60 @@ class UdpReceiver:
                 continue
             except OSError:
                 if not self.closed:
-                    rospy.logwarn("[competition_vehicle_status_bridge] UDP receiver socket closed")
+                    rospy.logwarn("[competition_morai_udp_bridge] %s UDP receiver socket closed", self.stream_name)
                 return
 
             try:
                 self.callback(raw, address)
             except Exception as exc:
-                rospy.logerr_throttle(5.0, "[competition_vehicle_status_bridge] UDP packet handling failed: %s", exc)
+                rospy.logerr_throttle(5.0, "[competition_morai_udp_bridge] %s UDP packet handling failed: %s", self.stream_name, exc)
 
 
-class CompetitionVehicleStatusBridge:
+class CompetitionMoraiUdpBridge:
     def __init__(self):
-        rospy.init_node("competition_vehicle_status_bridge", anonymous=False)
+        rospy.init_node("competition_morai_udp_bridge", anonymous=False)
 
         self.frame_id = rospy.get_param("~frame_id", "map")
+        self.gps_frame_id = rospy.get_param("~gps_frame_id", "gps")
+        self.imu_frame_id = rospy.get_param("~imu_frame_id", "imu")
         self.bind_ip = rospy.get_param("~bind_ip", "0.0.0.0")
-        self.bind_port = int(rospy.get_param("~bind_port", 9012))
-        self.expected_source_port = int(rospy.get_param("~expected_source_port", 9011))
+        self.status_bind_port = int(rospy.get_param("~status_bind_port", 9012))
+        self.gps_bind_port = int(rospy.get_param("~gps_bind_port", 11112))
+        self.imu_bind_port = int(rospy.get_param("~imu_bind_port", 11114))
+        self.status_source_port = int(rospy.get_param("~status_source_port", 9011))
+        self.gps_source_port = int(rospy.get_param("~gps_source_port", 11111))
+        self.imu_source_port = int(rospy.get_param("~imu_source_port", 11113))
         self.validate_source_port = _bool_param("~validate_source_port", False)
         self.strict_packet_markers = _bool_param("~strict_packet_markers", True)
         self.strict_data_length = _bool_param("~strict_data_length", False)
-        self.status_timeout = float(rospy.get_param("~status_timeout", 0.5))
+        self.vehicle_timeout = float(rospy.get_param("~vehicle_timeout", 0.5))
+        self.gps_timeout = float(rospy.get_param("~gps_timeout", 1.0))
+        self.imu_timeout = float(rospy.get_param("~imu_timeout", 0.5))
         self.queue_size = int(rospy.get_param("~queue_size", 1))
 
-        self.last_rx_monotonic = None
-        self.status_valid = None
+        self.last_vehicle_rx = None
+        self.last_gps_rx = None
+        self.last_imu_rx = None
+        self.vehicle_valid = None
+        self.gps_valid = None
+        self.imu_valid = None
+        self.latest_gprmc = {}
+        self.latest_gpgga = {}
         self.closed = False
 
         self._create_publishers()
-        self.receiver = UdpReceiver(self.bind_ip, self.bind_port, self.handle_udp_packet)
-        self.timeout_thread = threading.Thread(target=self._timeout_loop, name="competition_vehicle_status_timeout", daemon=True)
+        self.receivers = [
+            UdpReceiver("VehicleStatus", self.bind_ip, self.status_bind_port, self.handle_status_packet),
+            UdpReceiver("GPS", self.bind_ip, self.gps_bind_port, self.handle_gps_packet),
+            UdpReceiver("IMU", self.bind_ip, self.imu_bind_port, self.handle_imu_packet),
+        ]
+        self.timeout_thread = threading.Thread(target=self._timeout_loop, name="competition_morai_udp_timeout", daemon=True)
 
         rospy.on_shutdown(self.close)
 
     def _create_publishers(self):
+        self.gps_pub = rospy.Publisher(rospy.get_param("~gps_topic", "/gps"), GPSMessage, queue_size=self.queue_size)
+        self.imu_pub = rospy.Publisher(rospy.get_param("~imu_topic", "/imu/data"), Imu, queue_size=self.queue_size)
         self.heading_pub = rospy.Publisher(rospy.get_param("~heading_topic", "/heading"), Float64, queue_size=self.queue_size)
         self.current_speed_pub = rospy.Publisher(
             rospy.get_param("~current_speed_topic", "/current_speed"),
@@ -318,50 +433,132 @@ class CompetitionVehicleStatusBridge:
             Int8,
             queue_size=self.queue_size,
         )
-        self.valid_pub = rospy.Publisher(
+        self.vehicle_valid_pub = rospy.Publisher(
             rospy.get_param("~status_valid_topic", "/vehicle/status_valid"),
             Bool,
             queue_size=self.queue_size,
             latch=True,
         )
-        self.publish_status_valid(False)
+        self.gps_valid_pub = rospy.Publisher(
+            rospy.get_param("~gps_status_valid_topic", "/gps/status_valid"),
+            Bool,
+            queue_size=self.queue_size,
+            latch=True,
+        )
+        self.imu_valid_pub = rospy.Publisher(
+            rospy.get_param("~imu_status_valid_topic", "/imu/status_valid"),
+            Bool,
+            queue_size=self.queue_size,
+            latch=True,
+        )
+        self.publish_vehicle_valid(False)
+        self.publish_gps_valid(False)
+        self.publish_imu_valid(False)
 
     def start(self):
-        self.receiver.start()
+        for receiver in self.receivers:
+            receiver.start()
         self.timeout_thread.start()
         rospy.loginfo(
-            "[competition_vehicle_status_bridge] MORAI UDP %s:%d -> /heading, /current_speed, /vehicle/*",
+            "[competition_morai_udp_bridge] VehicleStatus %s:%d -> /vehicle/* | GPS %s:%d -> /gps | IMU %s:%d -> /imu/data",
             self.bind_ip,
-            self.bind_port,
+            self.status_bind_port,
+            self.bind_ip,
+            self.gps_bind_port,
+            self.bind_ip,
+            self.imu_bind_port,
         )
         rospy.spin()
 
     def close(self):
         self.closed = True
-        self.receiver.close()
+        for receiver in self.receivers:
+            receiver.close()
 
-    def handle_udp_packet(self, raw, address):
-        if self.validate_source_port and int(address[1]) != self.expected_source_port:
-            rospy.logwarn_throttle(
-                5.0,
-                "[competition_vehicle_status_bridge] ignored packet from %s:%d, expected source port %d",
-                address[0],
-                address[1],
-                self.expected_source_port,
-            )
+    def _is_expected_source(self, stream_name, address, expected_port):
+        if not self.validate_source_port:
+            return True
+        if int(address[1]) == int(expected_port):
+            return True
+        rospy.logwarn_throttle(
+            5.0,
+            "[competition_morai_udp_bridge] ignored %s packet from %s:%d, expected source port %d",
+            stream_name,
+            address[0],
+            address[1],
+            expected_port,
+        )
+        return False
+
+    def handle_status_packet(self, raw, address):
+        if not self._is_expected_source("VehicleStatus", address, self.status_source_port):
             return
 
         try:
-            parsed = self.parse_packet(raw)
+            parsed = self.parse_status_packet(raw)
         except ValueError as exc:
-            rospy.logwarn_throttle(5.0, "[competition_vehicle_status_bridge] %s", exc)
+            rospy.logwarn_throttle(
+                5.0,
+                "[competition_morai_udp_bridge] %s",
+                exc,
+            )
             return
 
         self.publish_control_topics(parsed, self.make_header(parsed))
-        self.last_rx_monotonic = time.monotonic()
-        self.publish_status_valid(True)
+        self.last_vehicle_rx = time.monotonic()
+        self.publish_vehicle_valid(True)
 
-    def parse_packet(self, raw):
+    def handle_gps_packet(self, raw, address):
+        if not self._is_expected_source("GPS", address, self.gps_source_port):
+            return
+
+        try:
+            parsed = self.parse_gps_packet(raw)
+        except ValueError as exc:
+            rospy.logwarn_throttle(5.0, "[competition_morai_udp_bridge] %s", exc)
+            return
+
+        if parsed is None:
+            return
+
+        msg = GPSMessage()
+        msg.header = Header(stamp=parsed.stamp, frame_id=self.gps_frame_id)
+        msg.latitude = parsed.latitude
+        msg.longitude = parsed.longitude
+        msg.altitude = parsed.altitude
+        msg.status = parsed.status
+        self.gps_pub.publish(msg)
+        self.last_gps_rx = time.monotonic()
+        self.publish_gps_valid(True)
+
+    def handle_imu_packet(self, raw, address):
+        if not self._is_expected_source("IMU", address, self.imu_source_port):
+            return
+
+        try:
+            packet = self.parse_imu_packet(raw)
+        except ValueError as exc:
+            rospy.logwarn_throttle(5.0, "[competition_morai_udp_bridge] %s", exc)
+            return
+
+        msg = Imu()
+        msg.header.stamp = _stamp_from_sec_nsec(packet.sec, packet.nsec)
+        msg.header.frame_id = self.imu_frame_id
+        msg.orientation.w = float(packet.ori_w)
+        msg.orientation.x = float(packet.ori_x)
+        msg.orientation.y = float(packet.ori_y)
+        msg.orientation.z = float(packet.ori_z)
+        msg.angular_velocity.x = float(packet.ang_vel_x)
+        msg.angular_velocity.y = float(packet.ang_vel_y)
+        msg.angular_velocity.z = float(packet.ang_vel_z)
+        msg.linear_acceleration.x = float(packet.lin_acc_x)
+        msg.linear_acceleration.y = float(packet.lin_acc_y)
+        msg.linear_acceleration.z = float(packet.lin_acc_z)
+        self.imu_pub.publish(msg)
+        self.last_imu_rx = time.monotonic()
+        self.publish_imu_valid(True)
+
+    def parse_status_packet(self, raw):
         size_24 = ctypes.sizeof(UdpEgoVehicleStatus24)
         size_26 = ctypes.sizeof(UdpEgoVehicleStatus26)
 
@@ -409,6 +606,64 @@ class CompetitionVehicleStatusBridge:
             brake=float(packet.brake),
         )
 
+    def parse_gps_packet(self, raw):
+        if len(raw) < 6:
+            raise ValueError("GPS packet too short: {} bytes".format(len(raw)))
+
+        max_size = ctypes.sizeof(UdpGpsPacket)
+        if len(raw) > max_size:
+            raise ValueError("GPS packet too large: got {} bytes, max {} bytes".format(len(raw), max_size))
+
+        header = raw[:6].decode("ascii", errors="ignore").strip("\x00")
+        data = raw[6:].decode("ascii", errors="ignore").strip("\x00\r\n")
+        fields = data.split(",")
+
+        if header == "$GPRMC":
+            if len(fields) < 10:
+                raise ValueError("GPS GPRMC packet has too few fields")
+            lat = _parse_nmea_degrees(fields[3], fields[4])
+            lon = _parse_nmea_degrees(fields[5], fields[6])
+            if lat is not None and lon is not None:
+                self.latest_gprmc = {"latitude": lat, "longitude": lon}
+            return self._make_gps_from_latest()
+
+        if header == "$GPGGA":
+            if len(fields) < 10:
+                raise ValueError("GPS GPGGA packet has too few fields")
+            lat = _parse_nmea_degrees(fields[2], fields[3])
+            lon = _parse_nmea_degrees(fields[4], fields[5])
+            if lat is not None and lon is not None:
+                self.latest_gpgga["latitude"] = lat
+                self.latest_gpgga["longitude"] = lon
+            self.latest_gpgga["status"] = _parse_int(fields[6], 0)
+            self.latest_gpgga["altitude"] = _parse_float(fields[9], 0.0)
+            return self._make_gps_from_latest()
+
+        raise ValueError("unsupported GPS NMEA header: {}".format(header))
+
+    def _make_gps_from_latest(self):
+        latitude = self.latest_gpgga.get("latitude", self.latest_gprmc.get("latitude"))
+        longitude = self.latest_gpgga.get("longitude", self.latest_gprmc.get("longitude"))
+        if latitude is None or longitude is None:
+            return None
+
+        return ParsedGps(
+            stamp=rospy.Time.now(),
+            latitude=float(latitude),
+            longitude=float(longitude),
+            altitude=float(self.latest_gpgga.get("altitude", 0.0)),
+            status=int(self.latest_gpgga.get("status", 0)),
+        )
+
+    def parse_imu_packet(self, raw):
+        expected_size = ctypes.sizeof(UdpImuPacket)
+        if not _valid_imu_packet(raw, expected_size, self.strict_packet_markers):
+            raise ValueError("invalid IMU packet")
+        packet = UdpImuPacket.from_buffer_copy(raw)
+        if not _check_data_length(packet, len(raw), 9, "IMU", self.strict_data_length):
+            raise ValueError("invalid IMU data_lenght")
+        return packet
+
     def make_header(self, parsed):
         header = Header()
         header.stamp = _packet_stamp(parsed)
@@ -451,24 +706,41 @@ class CompetitionVehicleStatusBridge:
         self.gear_pub.publish(Int8(data=parsed.gear))
         self.control_mode_pub.publish(Int8(data=parsed.control_mode))
 
-    def publish_status_valid(self, valid):
-        if self.status_valid == valid:
+    def publish_vehicle_valid(self, valid):
+        if self.vehicle_valid == valid:
             return
-        self.status_valid = valid
-        self.valid_pub.publish(Bool(data=valid))
+        self.vehicle_valid = valid
+        self.vehicle_valid_pub.publish(Bool(data=valid))
+
+    def publish_gps_valid(self, valid):
+        if self.gps_valid == valid:
+            return
+        self.gps_valid = valid
+        self.gps_valid_pub.publish(Bool(data=valid))
+
+    def publish_imu_valid(self, valid):
+        if self.imu_valid == valid:
+            return
+        self.imu_valid = valid
+        self.imu_valid_pub.publish(Bool(data=valid))
+
+    def _check_valid_timeout(self, last_rx, timeout, publish_func, stream_name):
+        if last_rx is None:
+            publish_func(False)
+        elif time.monotonic() - last_rx > timeout:
+            rospy.logwarn_throttle(1.0, "[competition_morai_udp_bridge] %s UDP timeout", stream_name)
+            publish_func(False)
 
     def _timeout_loop(self):
         while not rospy.is_shutdown() and not self.closed:
-            if self.last_rx_monotonic is None:
-                self.publish_status_valid(False)
-            elif time.monotonic() - self.last_rx_monotonic > self.status_timeout:
-                rospy.logwarn_throttle(1.0, "[competition_vehicle_status_bridge] vehicle status UDP timeout")
-                self.publish_status_valid(False)
+            self._check_valid_timeout(self.last_vehicle_rx, self.vehicle_timeout, self.publish_vehicle_valid, "VehicleStatus")
+            self._check_valid_timeout(self.last_gps_rx, self.gps_timeout, self.publish_gps_valid, "GPS")
+            self._check_valid_timeout(self.last_imu_rx, self.imu_timeout, self.publish_imu_valid, "IMU")
             time.sleep(0.1)
 
 
 if __name__ == "__main__":
     try:
-        CompetitionVehicleStatusBridge().start()
+        CompetitionMoraiUdpBridge().start()
     except rospy.ROSInterruptException:
         pass
