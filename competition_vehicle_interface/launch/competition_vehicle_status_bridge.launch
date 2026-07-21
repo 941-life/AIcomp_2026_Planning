@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<launch>
+  <!-- MORAI Competition Vehicle Status UDP input -->
+  <arg name="bind_ip" default="0.0.0.0" />
+  <arg name="bind_port" default="9012" />
+  <arg name="expected_source_port" default="9011" />
+  <arg name="validate_source_port" default="false" />
+  <arg name="strict_packet_markers" default="true" />
+  <arg name="strict_data_length" default="false" />
+
+  <!-- ROS output -->
+  <arg name="frame_id" default="map" />
+  <arg name="heading_topic" default="/heading" />
+  <arg name="current_speed_topic" default="/current_speed" />
+  <arg name="signed_speed_topic" default="/vehicle/signed_speed" />
+  <arg name="velocity_topic" default="/vehicle/velocity" />
+  <arg name="angular_velocity_topic" default="/vehicle/angular_velocity" />
+  <arg name="acceleration_topic" default="/vehicle/acceleration" />
+  <arg name="front_steer_topic" default="/vehicle/front_steer_angle" />
+  <arg name="rear_steer_topic" default="/vehicle/rear_steer_angle" />
+  <arg name="accel_topic" default="/vehicle/accel" />
+  <arg name="brake_topic" default="/vehicle/brake" />
+  <arg name="gear_topic" default="/vehicle/gear" />
+  <arg name="control_mode_topic" default="/vehicle/control_mode" />
+  <arg name="status_valid_topic" default="/vehicle/status_valid" />
+  <arg name="status_timeout" default="0.5" />
+  <arg name="queue_size" default="1" />
+
+  <node name="competition_vehicle_status_bridge" pkg="competition_vehicle_interface" type="competition_vehicle_status_bridge.py" output="screen" respawn="true">
+    <param name="bind_ip" value="$(arg bind_ip)" type="str" />
+    <param name="bind_port" value="$(arg bind_port)" type="int" />
+    <param name="expected_source_port" value="$(arg expected_source_port)" type="int" />
+    <param name="validate_source_port" value="$(arg validate_source_port)" type="bool" />
+    <param name="strict_packet_markers" value="$(arg strict_packet_markers)" type="bool" />
+    <param name="strict_data_length" value="$(arg strict_data_length)" type="bool" />
+    <param name="frame_id" value="$(arg frame_id)" type="str" />
+    <param name="heading_topic" value="$(arg heading_topic)" type="str" />
+    <param name="current_speed_topic" value="$(arg current_speed_topic)" type="str" />
+    <param name="signed_speed_topic" value="$(arg signed_speed_topic)" type="str" />
+    <param name="velocity_topic" value="$(arg velocity_topic)" type="str" />
+    <param name="angular_velocity_topic" value="$(arg angular_velocity_topic)" type="str" />
+    <param name="acceleration_topic" value="$(arg acceleration_topic)" type="str" />
+    <param name="front_steer_topic" value="$(arg front_steer_topic)" type="str" />
+    <param name="rear_steer_topic" value="$(arg rear_steer_topic)" type="str" />
+    <param name="accel_topic" value="$(arg accel_topic)" type="str" />
+    <param name="brake_topic" value="$(arg brake_topic)" type="str" />
+    <param name="gear_topic" value="$(arg gear_topic)" type="str" />
+    <param name="control_mode_topic" value="$(arg control_mode_topic)" type="str" />
+    <param name="status_valid_topic" value="$(arg status_valid_topic)" type="str" />
+    <param name="status_timeout" value="$(arg status_timeout)" type="double" />
+    <param name="queue_size" value="$(arg queue_size)" type="int" />
+  </node>
+</launch>
