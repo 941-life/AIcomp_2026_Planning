@@ -127,6 +127,11 @@ class UdpEgoVehicleStatus26(PackedStruct):
     ]
 
 
+# competition vehicle status로 맞추기 위해 추가한 class
+class UdpMoraiInfo(PackedStruct):
+    _fields_ = UdpEgoVehicleStatus24._fields_[:-13] + [("tail", ctypes.c_char * 2)]
+
+
 class UdpGpsPacket(PackedStruct):
     _fields_ = [
         ("header", ctypes.c_char * 6),
@@ -561,8 +566,17 @@ class CompetitionMoraiUdpBridge:
     def parse_status_packet(self, raw):
         size_24 = ctypes.sizeof(UdpEgoVehicleStatus24)
         size_26 = ctypes.sizeof(UdpEgoVehicleStatus26)
+        size_info = ctypes.sizeof(UdpMoraiInfo)
 
-        if len(raw) == size_24:
+        if len(raw) == size_info:
+            if not _valid_packet(raw, size_info, "MoraiInfo", self.strict_packet_markers):
+                raise ValueError("invalid MoraiInfo packet")
+            packet = UdpMoraiInfo.from_buffer_copy(raw)
+            if not _check_data_length(packet, len(raw), 11, "MoraiInfo", self.strict_data_length):
+                raise ValueError("invalid MoraiInfo data_lenght")
+            front_steer = float(packet.steer)
+            rear_steer = 0.0
+        elif len(raw) == size_24:
             if not _valid_packet(raw, size_24, "EgoVehicleStatus24", self.strict_packet_markers):
                 raise ValueError("invalid EgoVehicleStatus24 packet")
             packet = UdpEgoVehicleStatus24.from_buffer_copy(raw)
