@@ -218,6 +218,10 @@ def _bool_param(param_name, default):
     return str(value).strip().lower() in ("1", "true", "yes", "on")
 
 
+def _status_angular_velocity_to_radps(value_degps):
+    return math.radians(value_degps)
+
+
 def _parse_nmea_degrees(value, direction):
     if not value:
         return None
@@ -373,6 +377,7 @@ class CompetitionMoraiUdpBridge:
         # MORAI 상태 패킷의 조향 부호는 명령 규약(좌 +, 우 -)과 반대로 온다.
         # -1.0 을 곱해 /vehicle/front_steer_angle 을 명령과 같은 규약으로 맞춘다.
         self.steer_feedback_sign = float(rospy.get_param("~steer_feedback_sign", -1.0))
+        self.status_yaw_rate_sign = float(rospy.get_param("~status_yaw_rate_sign", -1.0))
 
         self.last_vehicle_rx = None
         self.last_gps_rx = None
@@ -704,9 +709,9 @@ class CompetitionMoraiUdpBridge:
 
         angular_velocity = Vector3Stamped()
         angular_velocity.header = header
-        angular_velocity.vector.x = parsed.angular_velocity_x
-        angular_velocity.vector.y = parsed.angular_velocity_y
-        angular_velocity.vector.z = parsed.angular_velocity_z
+        angular_velocity.vector.x = _status_angular_velocity_to_radps(parsed.angular_velocity_x)
+        angular_velocity.vector.y = _status_angular_velocity_to_radps(parsed.angular_velocity_y)
+        angular_velocity.vector.z = self.status_yaw_rate_sign * _status_angular_velocity_to_radps(parsed.angular_velocity_z)
         self.angular_velocity_pub.publish(angular_velocity)
 
         acceleration = Vector3Stamped()

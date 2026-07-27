@@ -26,7 +26,7 @@ _morai.msg = types.SimpleNamespace(CtrlCmd=object)
 sys.modules.setdefault("morai_msgs", _morai)
 sys.modules.setdefault("morai_msgs.msg", _morai.msg)
 
-from competition_control_udp_bridge import MAX_STEER_RAD, _normalize_steer
+from competition_control_udp_bridge import CompetitionControlUdpBridge, MAX_STEER_RAD, _normalize_steer
 
 
 def demo():
@@ -57,6 +57,21 @@ def demo():
 
     # LQR 이 실제로 내보내는 상한 34deg
     assert abs(_normalize_steer(0.5934119) - 34.0 / 40.0) < 1e-4
+
+    bridge = CompetitionControlUdpBridge.__new__(CompetitionControlUdpBridge)
+    bridge.watchdog_enabled = True
+    bridge.cmd_timeout = 0.2
+    assert bridge._should_use_safety_cmd(10.0, False, None)
+    assert bridge._should_use_safety_cmd(10.3, True, 10.0)
+    assert not bridge._should_use_safety_cmd(10.1, True, 10.0)
+
+    bridge.ctrl_mode = 2
+    bridge.gear = 4
+    packet = bridge._build_safety_packet()
+    assert packet.cmd_type == 1
+    assert packet.accel == 0.0
+    assert packet.brake == 1.0
+    assert packet.steer == 0.0
 
     print("normalize_steer OK (MAX_STEER_RAD=%.6f rad = %.1f deg, 34deg -> %.4f)"
           % (MAX_STEER_RAD, math.degrees(MAX_STEER_RAD), _normalize_steer(0.5934119)))

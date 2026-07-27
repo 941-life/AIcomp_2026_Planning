@@ -4,6 +4,7 @@
 import ctypes
 import math
 import socket
+import time
 from threading import Lock
 
 import rospy
@@ -67,10 +68,13 @@ class CompetitionControlUdpBridge:
         self.gear = int(rospy.get_param("~gear", 4))
         self.default_cmd_type = int(rospy.get_param("~default_cmd_type", 2))
         self.send_without_cmd = _bool_param("~send_without_cmd", False)
+        self.watchdog_enabled = _bool_param("~watchdog_enabled", True)
+        self.cmd_timeout = float(rospy.get_param("~cmd_timeout", 0.2))
 
         self.lock = Lock()
         self.latest_cmd = CtrlCmd()
         self.has_cmd = False
+        self.last_cmd_rx_time = None
 
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         rospy.on_shutdown(self.close)
@@ -79,13 +83,15 @@ class CompetitionControlUdpBridge:
         rospy.Timer(rospy.Duration(1.0 / max(self.hz, 1.0)), self._timer_callback)
 
         rospy.loginfo(
-            "[competition_control_udp_bridge] %s -> %s:%d | ctrl_mode=%d gear=%d hz=%.1f",
+            "[competition_control_udp_bridge] %s -> %s:%d | ctrl_mode=%d gear=%d hz=%.1f watchdog=%s timeout=%.3fs",
             self.cmd_topic,
             self.target_ip,
             self.target_port,
             self.ctrl_mode,
             self.gear,
             self.hz,
+            self.watchdog_enabled,
+            self.cmd_timeout,
         )
 
     def close(self):
@@ -98,6 +104,7 @@ class CompetitionControlUdpBridge:
         with self.lock:
             self.latest_cmd = msg
             self.has_cmd = True
+            self.last_cmd_rx_time = time.monotonic()
 
     def _log_steer(self, steering_rad, normalized):
         """UDP 로 나가는 조향을 1초에 한 줄 찍는다: 명령 조향(deg/rad) -> 정규화 값."""
@@ -132,20 +139,54 @@ class CompetitionControlUdpBridge:
         packet.tail = b"\r\n"
         return packet
 
+    def _build_safety_packet(self):
+        packet = UdpEgoCtrlCmd()
+        packet.header = b"#MoraiCtrlCmd$"
+        packet.data_lenght = 23
+        packet.aux_data = (ctypes.c_int32 * 3)(0, 0, 0)
+        packet.ctrl_mode = self.ctrl_mode
+        packet.gear = self.gear
+        packet.cmd_type = 1
+        packet.velocity = 0.0
+        packet.acceleration = 0.0
+        packet.accel = 0.0
+        packet.brake = 1.0
+        packet.steer = 0.0
+        packet.tail = b"\r\n"
+        return packet
+
+    def _should_use_safety_cmd(self, now, has_cmd, last_cmd_rx_time):
+        if not self.watchdog_enabled:
+            return False
+        if not has_cmd or last_cmd_rx_time is None:
+            return True
+        return now - last_cmd_rx_time > self.cmd_timeout
+
     def _send_packet(self, packet):
         payload = ctypes.string_at(ctypes.addressof(packet), ctypes.sizeof(packet))
         self.socket.sendto(payload, (self.target_ip, self.target_port))
 
     def _timer_callback(self, _event):
+        now = time.monotonic()
         with self.lock:
             has_cmd = self.has_cmd
             msg = self.latest_cmd
+            last_cmd_rx_time = self.last_cmd_rx_time
 
-        if not has_cmd and not self.send_without_cmd:
+        use_safety_cmd = self._should_use_safety_cmd(now, has_cmd, last_cmd_rx_time)
+
+        if not has_cmd and not self.send_without_cmd and not use_safety_cmd:
             return
 
-        packet = self._build_packet(msg)
-        self._log_steer(float(_get_field(msg, "steering", 0.0)), packet.steer)
+        if use_safety_cmd:
+            packet = self._build_safety_packet()
+            rospy.logwarn_throttle(
+                1.0,
+                "[competition_control_udp_bridge] ctrl_cmd watchdog active; sending safety brake",
+            )
+        else:
+            packet = self._build_packet(msg)
+            self._log_steer(float(_get_field(msg, "steering", 0.0)), packet.steer)
 
         try:
             self._send_packet(packet)

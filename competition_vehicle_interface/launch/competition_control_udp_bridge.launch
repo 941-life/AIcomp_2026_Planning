@@ -9,6 +9,8 @@
   <arg name="gear" default="4" />
   <arg name="default_cmd_type" default="2" />
   <arg name="send_without_cmd" default="false" />
+  <arg name="watchdog_enabled" default="true" />
+  <arg name="cmd_timeout" default="0.2" />
 
   <node name="competition_control_udp_bridge" pkg="competition_vehicle_interface" type="competition_control_udp_bridge.py" output="screen" respawn="true">
     <param name="cmd_topic" value="$(arg cmd_topic)" type="str" />
@@ -19,5 +21,7 @@
     <param name="gear" value="$(arg gear)" type="int" />
     <param name="default_cmd_type" value="$(arg default_cmd_type)" type="int" />
     <param name="send_without_cmd" value="$(arg send_without_cmd)" type="bool" />
+    <param name="watchdog_enabled" value="$(arg watchdog_enabled)" type="bool" />
+    <param name="cmd_timeout" value="$(arg cmd_timeout)" type="double" />
   </node>
 </launch>
