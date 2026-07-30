@@ -56,6 +56,8 @@
   <arg name="global_path1_folder_name" default="path_data" />
   <arg name="global_path1_file_name" default="path_sm" />
   <arg name="global_path1_frame_id" default="map" />
+  <arg name="global_path1_debug" default="false" />
+  <arg name="global_path1_debug_hz" default="1.0" />
   <arg name="global_path1_latch" default="true" />
   <arg name="global_path1_republish_hz" default="0.0" />
 
@@ -63,6 +65,8 @@
   <arg name="global_path2_folder_name" default="path_data" />
   <arg name="global_path2_file_name" default="path_sm" />
   <arg name="global_path2_frame_id" default="map" />
+  <arg name="global_path2_debug" default="false" />
+  <arg name="global_path2_debug_hz" default="1.0" />
   <arg name="global_path2_latch" default="true" />
   <arg name="global_path2_republish_hz" default="0.0" />
 
@@ -73,7 +77,7 @@
   <arg name="odom_path_front_distance" default="50.0" />
   <arg name="odom_path_window_back" default="10" />
   <arg name="odom_path_window_fwd" default="100" />
-  <arg name="odom_path_is_circular_path" default="false" />
+  <arg name="odom_path_is_circular_path" default="true" />
   <arg name="odom_path_teleport_ego_dist_thresh" default="5.0" />
   <arg name="odom_path_max_valid_nearest_dist" default="30.0" />
   <arg name="odom_path_distance_weight" default="1.0" />
@@ -147,6 +151,8 @@
     <param name="file_name" value="$(arg global_path1_file_name)" type="str" />
     <param name="topic_name" value="$(arg global_path1_topic)" type="str" />
     <param name="frame_id" value="$(arg global_path1_frame_id)" type="str" />
+    <param name="debug" value="$(arg global_path1_debug)" type="bool" />
+    <param name="debug_hz" value="$(arg global_path1_debug_hz)" type="double" />
     <param name="latch" value="$(arg global_path1_latch)" type="bool" />
     <param name="republish_hz" value="$(arg global_path1_republish_hz)" type="double" />
   </node>
@@ -157,6 +163,8 @@
     <param name="file_name" value="$(arg global_path2_file_name)" type="str" />
     <param name="topic_name" value="$(arg global_path2_topic)" type="str" />
     <param name="frame_id" value="$(arg global_path2_frame_id)" type="str" />
+    <param name="debug" value="$(arg global_path2_debug)" type="bool" />
+    <param name="debug_hz" value="$(arg global_path2_debug_hz)" type="double" />
     <param name="latch" value="$(arg global_path2_latch)" type="bool" />
     <param name="republish_hz" value="$(arg global_path2_republish_hz)" type="double" />
   </node>
