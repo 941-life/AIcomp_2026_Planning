@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<launch>
+  <arg name="config_file" default="$(find global_path_planner)/config/highway_planner_v1.yaml" />
+
+  <node name="highway_planner"
+        pkg="global_path_planner"
+        type="highway_planner_node"
+        output="screen"
+        respawn="true">
+    <rosparam command="load" file="$(arg config_file)" />
+  </node>
+</launch>

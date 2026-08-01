@@ -1,0 +1,84 @@
+# Highway planner V1.
+# Zone speed is intentionally disabled until the official K-City route stations
+# are measured. While disabled, the planner enforces limited_speed everywhere
+# and publishes /highway/current_s for calibration.
+
+rate_hz: 20.0
+
+global_path_topic: /global_path1
+local_path_topic: /local_path1
+odom_topic: /gps_utm_odom
+speed_topic: /current_speed
+status_valid_topic: /vehicle_status_valid
+objects_topic: /obstacle_path_info
+
+target_path_topic: /highway/target_path
+target_speed_topic: /highway/target_speed
+zone_state_topic: /highway/zone_state
+behavior_state_topic: /highway/behavior_state
+emergency_topic: /highway/emergency_stop
+current_s_topic: /highway/current_s
+ttc_topic: /highway/ttc
+
+require_vehicle_status: true
+# Turn this on only when /obstacle_path_info is guaranteed to publish
+# continuously, including empty arrays.
+require_objects: false
+input_timeout: 0.5
+objects_timeout: 0.5
+
+route:
+  circular: true
+  curvature_half_window: 10
+  max_lateral_accel: 2.5
+  maximum_speed: 25.0
+  # Reject malformed reference paths instead of hiding impossible curvature.
+  maximum_allowed_curvature: 0.2
+  projection_search_radius: 400
+  relocalization_distance: 8.0
+  maximum_route_distance: 10.0
+  projection_heading_weight: 5.0
+  curve_lookahead_distance: 100.0
+  curve_planned_deceleration: 2.5
+
+zone:
+  enabled: false
+  entry_s: 0.0
+  high_speed_start_s: 0.0
+  brake_start_s: 0.0
+  limit_start_s: 0.0
+  approach_distance: 30.0
+  limited_speed: 16.0
+  highway_speed: 25.0
+  planned_deceleration: 2.5
+  limit_margin: 10.0
+  system_delay: 0.3
+
+# V1 uses only fields already consumed by the existing code:
+# path_number, distance and obj_position. Relative speed is estimated from the
+# nearest leader's filtered distance change; no unverified object fields are used.
+leader:
+  path_number: 1
+  maximum_distance: 120.0
+  hold_time: 0.3
+  switch_distance: 8.0
+  relative_speed_alpha: 0.3
+  maximum_relative_speed: 30.0
+
+acc:
+  standstill_gap: 5.0
+  time_headway: 1.5
+  gap_gain: 0.25
+  relative_speed_gain: 0.8
+  response_time: 1.0
+  maximum_acceleration: 2.0
+  comfortable_deceleration: 2.5
+  emergency_deceleration: 5.0
+  minimum_gap: 3.0
+  emergency_ttc: 1.5
+
+speed_filter:
+  maximum_acceleration: 2.0
+  maximum_deceleration: 3.0
+  maximum_jerk: 1.5
+  response_time: 0.8
