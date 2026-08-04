@@ -11,7 +11,6 @@
 
 #include <opencv2/opencv.hpp>
 
-#include <algorithm>
 #include <array>
 #include <cmath>
 #include <string>
@@ -45,10 +44,9 @@ bool isTrafficLightSlowdownRegion(const std::string& state)
 class RegionStatePublisher
 {
 public:
-    explicit RegionStatePublisher(const std::string& default_region_name)
+    explicit RegionStatePublisher(const std::string& region_name)
         : nh_(),
-          pnh_("~"),
-          region_name_(default_region_name),
+          region_name_(region_name),
           state_string_("go"),
           final_state_("go"),
           gps_state_("unknown"),
@@ -59,26 +57,21 @@ public:
           map_cache_ready_(false),
           first_algorithm_log_(true)
     {
-        loadParams();
-
-        region_state_pub_ = nh_.advertise<std_msgs::String>(state_topic_, publish_queue_size_);
-        traffic_light_sub_ = nh_.subscribe(traffic_light_topic_, subscribe_queue_size_, &RegionStatePublisher::trafficLightCallback, this);
-        pose_sub_ = nh_.subscribe(odom_topic_, subscribe_queue_size_, &RegionStatePublisher::poseCallback, this);
-        gps_quat_sub_ = nh_.subscribe(gps_quat_topic_, subscribe_queue_size_, &RegionStatePublisher::gpsQuatCallback, this);
-        map_client_ = nh_.serviceClient<nav_msgs::GetMap>(region_map_service_);
+        region_state_pub_ = nh_.advertise<std_msgs::String>("/state", 1);
+        traffic_light_sub_ = nh_.subscribe("/traffic_light_state", 1, &RegionStatePublisher::trafficLightCallback, this);
+        pose_sub_ = nh_.subscribe("/gps_utm_odom", 10, &RegionStatePublisher::poseCallback, this);
+        gps_quat_sub_ = nh_.subscribe("/gphdt_quat_pub", 10, &RegionStatePublisher::gpsQuatCallback, this);
+        map_client_ = nh_.serviceClient<nav_msgs::GetMap>("/region_map/static_map");
 
         const std::string package_path = ros::package::getPath("global_path_planner");
-        if (region_image_path_.empty()) {
-            region_image_path_ = package_path + "/" + region_image_folder_ + "/" +
-                                 region_image_prefix_ + region_name_ + region_image_extension_;
-        }
-        region_image_ = cv::imread(region_image_path_, 1);
+        const std::string image_path = package_path + "/map_data/region_" + region_name_ + ".png";
+        region_image_ = cv::imread(image_path, 1);
 
         if (region_image_.empty()) {
-            ROS_WARN("[region_state_publisher] failed to load region image: %s", region_image_path_.c_str());
+            ROS_WARN("[region_state_publisher] failed to load region image: %s", image_path.c_str());
         } else {
             ROS_INFO("[region_state_publisher] loaded region image: %s (%d x %d)",
-                     region_image_path_.c_str(), region_image_.cols, region_image_.rows);
+                     image_path.c_str(), region_image_.cols, region_image_.rows);
         }
 
         publishState();
@@ -86,7 +79,7 @@ public:
 
     void spin()
     {
-        ros::Rate rate(rate_hz_);
+        ros::Rate rate(10);
         while (ros::ok()) {
             if (!region_map_loaded_) {
                 loadRegionMap();
@@ -123,41 +116,14 @@ private:
         int image_rows = 0;
     };
 
-    void loadParams()
-    {
-        pnh_.param("region_name", region_name_, region_name_);
-        pnh_.param("state_topic", state_topic_, state_topic_);
-        pnh_.param("traffic_light_topic", traffic_light_topic_, traffic_light_topic_);
-        pnh_.param("odom_topic", odom_topic_, odom_topic_);
-        pnh_.param("gps_quat_topic", gps_quat_topic_, gps_quat_topic_);
-        pnh_.param("region_map_service", region_map_service_, region_map_service_);
-        pnh_.param("region_image_path", region_image_path_, region_image_path_);
-        pnh_.param("region_image_folder", region_image_folder_, region_image_folder_);
-        pnh_.param("region_image_prefix", region_image_prefix_, region_image_prefix_);
-        pnh_.param("region_image_extension", region_image_extension_, region_image_extension_);
-        pnh_.param("rate_hz", rate_hz_, rate_hz_);
-        pnh_.param("subscribe_queue_size", subscribe_queue_size_, subscribe_queue_size_);
-        pnh_.param("publish_queue_size", publish_queue_size_, publish_queue_size_);
-        pnh_.param("gps_cov_x_threshold", gps_cov_x_threshold_, gps_cov_x_threshold_);
-        pnh_.param("gps_cov_y_threshold", gps_cov_y_threshold_, gps_cov_y_threshold_);
-        pnh_.param("gps_cov_z_threshold", gps_cov_z_threshold_, gps_cov_z_threshold_);
-
-        rate_hz_ = std::max(1.0, rate_hz_);
-        subscribe_queue_size_ = std::max(1, subscribe_queue_size_);
-        publish_queue_size_ = std::max(1, publish_queue_size_);
-        gps_cov_x_threshold_ = std::max(0.0, gps_cov_x_threshold_);
-        gps_cov_y_threshold_ = std::max(0.0, gps_cov_y_threshold_);
-        gps_cov_z_threshold_ = std::max(0.0, gps_cov_z_threshold_);
-    }
-
     void poseCallback(const nav_msgs::Odometry::ConstPtr& msg)
     {
         ++pose_count_;
         current_pose_ = msg;
 
-        if (msg->pose.covariance[0] > gps_cov_x_threshold_ ||
-            msg->pose.covariance[7] > gps_cov_y_threshold_ ||
-            msg->pose.covariance[14] > gps_cov_z_threshold_) {
+        if (msg->pose.covariance[0] > 3.0 ||
+            msg->pose.covariance[7] > 3.0 ||
+            msg->pose.covariance[14] > 10.0) {
             gps_state_ = "fail";
         } else {
             gps_state_ = "good";
@@ -289,7 +255,6 @@ private:
     }
 
     ros::NodeHandle nh_;
-    ros::NodeHandle pnh_;
     ros::Publisher region_state_pub_;
     ros::Subscriber traffic_light_sub_;
     ros::Subscriber pose_sub_;
@@ -297,15 +262,6 @@ private:
     ros::ServiceClient map_client_;
 
     std::string region_name_;
-    std::string state_topic_ = "/state";
-    std::string traffic_light_topic_ = "/traffic_light_state";
-    std::string odom_topic_ = "/gps_utm_odom";
-    std::string gps_quat_topic_ = "/gphdt_quat_pub";
-    std::string region_map_service_ = "/region_map/static_map";
-    std::string region_image_path_;
-    std::string region_image_folder_ = "map_data";
-    std::string region_image_prefix_ = "region_";
-    std::string region_image_extension_ = ".png";
     cv::Mat region_image_;
     nav_msgs::MapMetaData region_map_info_;
     CachedMapGeometry map_cache_;
@@ -318,12 +274,6 @@ private:
     std::string traffic_light_state_;
 
     int pose_count_;
-    double rate_hz_ = 10.0;
-    int subscribe_queue_size_ = 10;
-    int publish_queue_size_ = 1;
-    double gps_cov_x_threshold_ = 3.0;
-    double gps_cov_y_threshold_ = 3.0;
-    double gps_cov_z_threshold_ = 10.0;
     bool region_map_loaded_;
     bool map_cache_ready_;
     bool first_algorithm_log_;

@@ -23,7 +23,6 @@ class GlobalPathPublisher:
 
     Publish mode:
     - Load the path file once, cache it in memory, then publish once with latch.
-    - If ~debug is true, also republish the cached path at ~debug_hz.
     - ~republish_hz is kept only for launch compatibility and is ignored.
     """
 
@@ -35,17 +34,8 @@ class GlobalPathPublisher:
         self.topic_name   = rospy.get_param("~topic_name",   "/global_path1")
         self.frame_id     = rospy.get_param("~frame_id",     "map")
 
-        self.debug        = bool(rospy.get_param("~debug", False))
-        self.debug_hz     = float(rospy.get_param("~debug_hz", 1.0))
         self.latch        = bool(rospy.get_param("~latch", True))
         self.republish_hz = float(rospy.get_param("~republish_hz", 0.0))
-
-        if self.debug_hz <= 0.0:
-            rospy.logwarn(
-                "[global_path_publisher] invalid debug_hz=%.3f; using 1.0 Hz",
-                self.debug_hz
-            )
-            self.debug_hz = 1.0
 
         # 기존 launch args 방식도 계속 지원한다.
         argv = rospy.myargv(argv=sys.argv)
@@ -68,14 +58,8 @@ class GlobalPathPublisher:
         self.path_msg.header.frame_id = self.frame_id
         self._load_path_file()
 
-        # Publish once immediately. Debug mode adds a low-rate timer while
-        # preserving latch for late subscribers.
-        if self.debug:
-            rospy.loginfo(
-                "[global_path_publisher] debug republish %.3f Hz latch=%s topic=%s",
-                self.debug_hz, str(self.latch), self.topic_name
-            )
-        elif self.republish_hz > 0.0:
+        # publish once; keep republish_hz only for old launch compatibility.
+        if self.republish_hz > 0.0:
             rospy.logwarn(
                 "[global_path_publisher] republish_hz=%.3f is ignored; publishing once with latch=%s topic=%s",
                 self.republish_hz, str(self.latch), self.topic_name
@@ -86,11 +70,7 @@ class GlobalPathPublisher:
                 str(self.latch), self.topic_name
             )
         self._publish_once()
-        if self.debug:
-            self.publish_timer = rospy.Timer(
-                rospy.Duration(1.0 / self.debug_hz), self._publish_timer_cb
-            )
-        rospy.loginfo("[global_path_publisher] publish initialized. node will stay alive (spin).")
+        rospy.loginfo("[global_path_publisher] publish done. node will stay alive (spin).")
 
     def _resolve_file_path(self) -> str:
         """txt 파일의 절대 경로를 계산."""
@@ -155,14 +135,8 @@ class GlobalPathPublisher:
     def _publish_once(self) -> None:
         # roslaunch/rosrun 직후 연결 타이밍 완화
         rospy.sleep(0.2)
-        self._publish_path()
-
-    def _publish_path(self) -> None:
         self._stamp_path_header(rospy.Time.now())
         self.pub.publish(self.path_msg)
-
-    def _publish_timer_cb(self, _event) -> None:
-        self._publish_path()
 
 
 def main() -> None:
