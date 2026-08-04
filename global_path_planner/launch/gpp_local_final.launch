@@ -37,6 +37,7 @@
   <arg name="global_path1_package_name" default="global_path_planner" />
   <arg name="global_path1_folder_name" default="path_data" />
   <arg name="global_path1_file_name" default="kcity" />
+  <arg name="global_path1_topic_name" default="/global_path1" />
   <arg name="global_path1_frame_id" default="map" />
   <arg name="global_path1_latch" default="true" />
   <arg name="global_path1_republish_hz" default="0.0" />
@@ -45,6 +46,7 @@
   <arg name="global_path2_package_name" default="global_path_planner" />
   <arg name="global_path2_folder_name" default="path_data" />
   <arg name="global_path2_file_name" default="kcity" />
+  <arg name="global_path2_topic_name" default="/global_path2" />
   <arg name="global_path2_frame_id" default="map" />
   <arg name="global_path2_latch" default="true" />
   <arg name="global_path2_republish_hz" default="0.0" />
