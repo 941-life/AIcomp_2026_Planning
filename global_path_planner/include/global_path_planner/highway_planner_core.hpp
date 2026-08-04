@@ -121,49 +121,6 @@ private:
     double entry_to_limit_ = 0.0;
 };
 
-struct LeaderObservation
-{
-    bool valid = false;
-    double distance = 0.0;
-    double relative_speed = 0.0;  // leader speed - ego speed
-};
-
-struct AccConfig
-{
-    double standstill_gap = 5.0;
-    double time_headway = 1.5;
-    double gap_gain = 0.25;
-    double relative_speed_gain = 0.8;
-    double response_time = 1.0;
-    double maximum_acceleration = 2.0;
-    double comfortable_deceleration = 2.5;
-    double emergency_deceleration = 5.0;
-    double minimum_gap = 3.0;
-    double emergency_ttc = 1.5;
-};
-
-struct LongitudinalResult
-{
-    double target_speed = 0.0;
-    double ttc = std::numeric_limits<double>::infinity();
-    double required_deceleration = 0.0;
-    bool following = false;
-    bool emergency = false;
-};
-
-class LongitudinalPlanner
-{
-public:
-    explicit LongitudinalPlanner(const AccConfig& config) : config_(config) {}
-
-    LongitudinalResult plan(double ego_speed,
-                            double free_flow_speed,
-                            const LeaderObservation& leader) const;
-
-private:
-    AccConfig config_;
-};
-
 struct SpeedFilterConfig
 {
     double maximum_acceleration = 2.0;
@@ -178,7 +135,7 @@ public:
     explicit SpeedCommandFilter(const SpeedFilterConfig& config) : config_(config) {}
 
     void reset(double speed);
-    double update(double raw_target_speed, double dt);
+    double update(double desired_speed, double hard_speed_limit, double dt);
     double speed() const { return speed_; }
 
 private:

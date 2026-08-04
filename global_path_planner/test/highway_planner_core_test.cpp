@@ -89,31 +89,6 @@ TEST(ZonePlanner, RejectsAmbiguousZoneOrder)
     EXPECT_FALSE(error.empty());
 }
 
-TEST(LongitudinalPlanner, AppliesAccAndEmergencyTtc)
-{
-    hp::AccConfig config;
-    hp::LongitudinalPlanner planner(config);
-
-    const hp::LongitudinalResult cruise =
-        planner.plan(20.0, 25.0, hp::LeaderObservation());
-    EXPECT_FALSE(cruise.following);
-    EXPECT_DOUBLE_EQ(cruise.target_speed, 25.0);
-
-    hp::LeaderObservation leader;
-    leader.valid = true;
-    leader.distance = 20.0;
-    leader.relative_speed = -2.0;
-    const hp::LongitudinalResult follow = planner.plan(20.0, 25.0, leader);
-    EXPECT_TRUE(follow.following);
-    EXPECT_FALSE(follow.emergency);
-    EXPECT_LT(follow.target_speed, 20.0);
-
-    leader.distance = 2.5;
-    const hp::LongitudinalResult emergency = planner.plan(20.0, 25.0, leader);
-    EXPECT_TRUE(emergency.emergency);
-    EXPECT_DOUBLE_EQ(emergency.target_speed, 0.0);
-}
-
 TEST(SpeedCommandFilter, LimitsAccelerationChange)
 {
     hp::SpeedFilterConfig config;
@@ -125,6 +100,24 @@ TEST(SpeedCommandFilter, LimitsAccelerationChange)
     hp::SpeedCommandFilter filter(config);
     filter.reset(10.0);
 
-    EXPECT_NEAR(filter.update(0.0, 1.0), 8.5, 1e-9);
-    EXPECT_NEAR(filter.update(0.0, 1.0), 5.5, 1e-9);
+    EXPECT_NEAR(filter.update(0.0, 100.0, 1.0), 8.5, 1e-9);
+    EXPECT_NEAR(filter.update(0.0, 100.0, 1.0), 5.5, 1e-9);
+}
+
+TEST(SpeedCommandFilter, NeverExceedsHardSpeedLimit)
+{
+    hp::SpeedFilterConfig config;
+    hp::SpeedCommandFilter filter(config);
+    filter.reset(25.0);
+
+    EXPECT_DOUBLE_EQ(filter.update(25.0, 16.0, 0.05), 16.0);
+    filter.reset(25.0);
+    EXPECT_DOUBLE_EQ(filter.update(25.0, 16.0, 0.0), 16.0);
+    EXPECT_LT(filter.update(25.0, 25.0, 0.05), 16.01);
+}
+
+int main(int argc, char** argv)
+{
+    testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
 }

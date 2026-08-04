@@ -20,7 +20,7 @@ find_package(OpenCV REQUIRED)
 
 catkin_package(
   INCLUDE_DIRS include
-  LIBRARIES highway_planner_core
+  LIBRARIES following_planner highway_planner_core
   CATKIN_DEPENDS
     geometry_msgs
     katri_msgs
@@ -45,6 +45,10 @@ add_library(highway_planner_core src/highway_planner_core.cpp)
 add_dependencies(highway_planner_core ${catkin_EXPORTED_TARGETS})
 target_link_libraries(highway_planner_core ${catkin_LIBRARIES})
 
+add_library(following_planner src/following_planner.cpp)
+add_dependencies(following_planner ${catkin_EXPORTED_TARGETS})
+target_link_libraries(following_planner ${catkin_LIBRARIES})
+
 add_executable(odom_path_publisher src/odom_path_publisher.cpp)
 add_dependencies(odom_path_publisher ${catkin_EXPORTED_TARGETS})
 target_link_libraries(odom_path_publisher ${catkin_LIBRARIES})
@@ -59,17 +63,28 @@ target_link_libraries(region_state_publisher ${catkin_LIBRARIES} ${OpenCV_LIBS})
 
 add_executable(highway_planner_node src/highway_planner_node.cpp)
 add_dependencies(highway_planner_node ${catkin_EXPORTED_TARGETS})
-target_link_libraries(highway_planner_node highway_planner_core ${catkin_LIBRARIES})
+target_link_libraries(
+  highway_planner_node
+  following_planner
+  highway_planner_core
+  ${catkin_LIBRARIES}
+)
 
 if(CATKIN_ENABLE_TESTING)
   catkin_add_gtest(highway_planner_core_test test/highway_planner_core_test.cpp)
   if(TARGET highway_planner_core_test)
     target_link_libraries(highway_planner_core_test highway_planner_core ${catkin_LIBRARIES})
   endif()
+
+  catkin_add_gtest(following_planner_test test/following_planner_test.cpp)
+  if(TARGET following_planner_test)
+    target_link_libraries(following_planner_test following_planner ${catkin_LIBRARIES})
+  endif()
 endif()
 
 catkin_install_python(PROGRAMS
   scripts/control_status_adapter.py
+  scripts/gps_imu_fusion.py
   scripts/global_path_publisher.py
   scripts/ll2utm.py
   scripts/path_maker_sm.py
@@ -77,6 +92,7 @@ catkin_install_python(PROGRAMS
 )
 
 install(TARGETS
+  following_planner
   highway_planner_core
   highway_planner_node
   odom_path_publisher

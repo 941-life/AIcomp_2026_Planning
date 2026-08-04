@@ -1,3 +1,4 @@
+#include "global_path_planner/following_planner.hpp"
 #include "global_path_planner/highway_planner_core.hpp"
 
 #include <ros/ros.h>
@@ -7,24 +8,14 @@
 #include <nav_msgs/Path.h>
 #include <std_msgs/Bool.h>
 #include <std_msgs/Float64.h>
+#include <std_msgs/Int32.h>
 #include <std_msgs/String.h>
 #include <tf/transform_datatypes.h>
 
 #include <algorithm>
 #include <cmath>
-#include <limits>
 #include <string>
 #include <vector>
-
-namespace
-{
-
-double clamp(const double value, const double minimum, const double maximum)
-{
-    return std::max(minimum, std::min(maximum, value));
-}
-
-}  // namespace
 
 class HighwayPlannerNode
 {
@@ -32,7 +23,7 @@ public:
     HighwayPlannerNode()
         : nh_(),
           pnh_("~"),
-          longitudinal_planner_(loadAccConfig()),
+          following_planner_(loadFollowingConfig()),
           speed_filter_(loadSpeedFilterConfig())
     {
         loadParams();
@@ -41,17 +32,25 @@ public:
             global_path_topic_, 1, &HighwayPlannerNode::globalPathCallback, this);
         local_path_sub_ = nh_.subscribe(
             local_path_topic_, 1, &HighwayPlannerNode::localPathCallback, this);
+        //차량 위치와 heading
         odom_sub_ = nh_.subscribe(
             odom_topic_, 10, &HighwayPlannerNode::odomCallback, this);
+        // 현재 속도
         speed_sub_ = nh_.subscribe(
             speed_topic_, 10, &HighwayPlannerNode::speedCallback, this);
+        // 브릿지에서 차량 상태가 정상적으로 들어오는지
         status_valid_sub_ = nh_.subscribe(
             status_valid_topic_, 1, &HighwayPlannerNode::statusValidCallback, this);
+        current_path_sub_ = nh_.subscribe(
+            current_path_topic_, 1, &HighwayPlannerNode::currentPathCallback, this);
+        //선행차량까지의 거리와 상대속도를 계산
         objects_sub_ = nh_.subscribe(
             objects_topic_, 10, &HighwayPlannerNode::objectsCallback, this);
 
         target_path_pub_ = nh_.advertise<nav_msgs::Path>(target_path_topic_, 1);
         target_speed_pub_ = nh_.advertise<std_msgs::Float64>(target_speed_topic_, 1);
+        hard_speed_limit_pub_ =
+            nh_.advertise<std_msgs::Float64>(hard_speed_limit_topic_, 1);
         zone_state_pub_ = nh_.advertise<std_msgs::String>(zone_state_topic_, 1);
         behavior_state_pub_ = nh_.advertise<std_msgs::String>(behavior_state_topic_, 1);
         emergency_pub_ = nh_.advertise<std_msgs::Bool>(emergency_topic_, 1);
@@ -78,7 +77,8 @@ public:
                 (require_vehicle_status_ && !status_received_)) {
                 ROS_INFO_THROTTLE(
                     2.0,
-                    "[highway_planner] waiting for global/local path, odom, speed and valid vehicle status");
+                    "[highway_planner] waiting for paths, current lane, odom, speed and valid vehicle status");
+                publishStop(now, "INPUT_NOT_READY");
                 rate.sleep();
                 continue;
             }
@@ -90,6 +90,7 @@ public:
             }
 
             const highway_planner::Projection projection = route_.project(
+                //현재 차량 위치 (ego_x_, ego_y_)와 yaw를 사용해 전역 경로에서 가장 가까운 지점 찾기
                 ego_x_,
                 ego_y_,
                 ego_yaw_,
@@ -97,7 +98,7 @@ public:
                 projection_search_radius_,
                 relocalization_distance_,
                 projection_heading_weight_);
-            if (!projection.valid ||
+            if (!projection.valid || //기본 허용 거리
                 projection.distance > maximum_route_distance_) {
                 publishStop(now, "ROUTE_LOST");
                 rate.sleep();
@@ -115,21 +116,29 @@ public:
             const double free_flow_speed = std::min(
                 curve_speed,
                 std::min(zone.zone_speed, zone.tollgate_speed));
-            const highway_planner::LeaderObservation leader = leaderObservation(now);
-            const highway_planner::LongitudinalResult longitudinal =
-                longitudinal_planner_.plan(ego_speed_, free_flow_speed, leader);
+            const highway_planner::FollowingResult following =
+                following_planner_.plan(
+                    current_path_,
+                    ego_speed_,
+                    free_flow_speed,
+                    now.toSec());
 
             const bool objects_stale =
                 require_objects_ &&
                 (last_objects_stamp_.isZero() ||
                  (now - last_objects_stamp_).toSec() > objects_timeout_);
-            const bool emergency = longitudinal.emergency || objects_stale;
+            const bool emergency = following.emergency || objects_stale;
 
             double target_speed = 0.0;
+            double hard_speed_limit = 0.0;
             std::string behavior = "STOP";
             if (!emergency) {
-                target_speed = speed_filter_.update(longitudinal.target_speed, dt);
-                behavior = longitudinal.following ? "FOLLOW" : "CRUISE";
+                hard_speed_limit = following.target_speed;
+                target_speed = speed_filter_.update(
+                    zone.zone_speed,
+                    hard_speed_limit,
+                    dt);
+                behavior = following.following ? "FOLLOW" : "CRUISE";
             } else {
                 speed_filter_.reset(0.0);
             }
@@ -140,38 +149,72 @@ public:
                 zone,
                 behavior,
                 target_speed,
-                longitudinal.ttc,
+                hard_speed_limit,
+                following.ttc,
                 emergency);
             rate.sleep();
         }
     }
 
 private:
-    highway_planner::AccConfig loadAccConfig()
+    highway_planner::FollowingConfig loadFollowingConfig()
     {
-        highway_planner::AccConfig config;
-        pnh_.param("acc/standstill_gap", config.standstill_gap, config.standstill_gap);
-        pnh_.param("acc/time_headway", config.time_headway, config.time_headway);
-        pnh_.param("acc/gap_gain", config.gap_gain, config.gap_gain);
+        highway_planner::FollowingConfig config;
+        pnh_.param(
+            "leader/maximum_distance",
+            config.maximum_distance,
+            config.maximum_distance);
+        pnh_.param("leader/hold_time", config.hold_time, config.hold_time);
+        pnh_.param(
+            "leader/switch_distance",
+            config.switch_distance,
+            config.switch_distance);
+        pnh_.param(
+            "leader/relative_speed_alpha",
+            config.relative_speed_alpha,
+            config.relative_speed_alpha);
+        pnh_.param(
+            "leader/maximum_relative_speed",
+            config.maximum_relative_speed,
+            config.maximum_relative_speed);
+
+        pnh_.param(
+            "acc/standstill_gap",
+            config.acc.standstill_gap,
+            config.acc.standstill_gap);
+        pnh_.param(
+            "acc/time_headway",
+            config.acc.time_headway,
+            config.acc.time_headway);
+        pnh_.param("acc/gap_gain", config.acc.gap_gain, config.acc.gap_gain);
         pnh_.param(
             "acc/relative_speed_gain",
-            config.relative_speed_gain,
-            config.relative_speed_gain);
-        pnh_.param("acc/response_time", config.response_time, config.response_time);
+            config.acc.relative_speed_gain,
+            config.acc.relative_speed_gain);
+        pnh_.param(
+            "acc/response_time",
+            config.acc.response_time,
+            config.acc.response_time);
         pnh_.param(
             "acc/maximum_acceleration",
-            config.maximum_acceleration,
-            config.maximum_acceleration);
+            config.acc.maximum_acceleration,
+            config.acc.maximum_acceleration);
         pnh_.param(
             "acc/comfortable_deceleration",
-            config.comfortable_deceleration,
-            config.comfortable_deceleration);
+            config.acc.comfortable_deceleration,
+            config.acc.comfortable_deceleration);
         pnh_.param(
             "acc/emergency_deceleration",
-            config.emergency_deceleration,
-            config.emergency_deceleration);
-        pnh_.param("acc/minimum_gap", config.minimum_gap, config.minimum_gap);
-        pnh_.param("acc/emergency_ttc", config.emergency_ttc, config.emergency_ttc);
+            config.acc.emergency_deceleration,
+            config.acc.emergency_deceleration);
+        pnh_.param(
+            "acc/minimum_gap",
+            config.acc.minimum_gap,
+            config.acc.minimum_gap);
+        pnh_.param(
+            "acc/emergency_ttc",
+            config.acc.emergency_ttc,
+            config.acc.emergency_ttc);
         return config;
     }
 
@@ -205,6 +248,10 @@ private:
         pnh_.param("odom_topic", odom_topic_, std::string("/gps_utm_odom"));
         pnh_.param("speed_topic", speed_topic_, std::string("/current_speed"));
         pnh_.param(
+            "current_path_topic",
+            current_path_topic_,
+            std::string("/current_path"));
+        pnh_.param(
             "status_valid_topic",
             status_valid_topic_,
             std::string("/vehicle_status_valid"));
@@ -221,6 +268,10 @@ private:
             "target_speed_topic",
             target_speed_topic_,
             std::string("/highway/target_speed"));
+        pnh_.param(
+            "hard_speed_limit_topic",
+            hard_speed_limit_topic_,
+            std::string("/highway/hard_speed_limit"));
         pnh_.param(
             "zone_state_topic",
             zone_state_topic_,
@@ -242,7 +293,12 @@ private:
         pnh_.param("require_vehicle_status", require_vehicle_status_, true);
         pnh_.param("require_objects", require_objects_, false);
         pnh_.param("input_timeout", input_timeout_, 0.5);
+        pnh_.param("local_path_timeout", local_path_timeout_, 0.5);
         pnh_.param("objects_timeout", objects_timeout_, 0.5);
+        pnh_.param(
+            "expected_local_path_frame",
+            expected_local_path_frame_,
+            std::string("base_link"));
 
         pnh_.param("route/circular", route_circular_, true);
         pnh_.param("route/curvature_half_window", curvature_half_window_, 10);
@@ -262,13 +318,6 @@ private:
             curve_planned_deceleration_,
             2.5);
 
-        pnh_.param("leader/path_number", leader_path_number_, 1);
-        pnh_.param("leader/maximum_distance", leader_maximum_distance_, 120.0);
-        pnh_.param("leader/hold_time", leader_hold_time_, 0.3);
-        pnh_.param("leader/switch_distance", leader_switch_distance_, 8.0);
-        pnh_.param("leader/relative_speed_alpha", relative_speed_alpha_, 0.3);
-        pnh_.param("leader/maximum_relative_speed", maximum_relative_speed_, 30.0);
-
         pnh_.param("zone/enabled", zone_config_.enabled, false);
         pnh_.param("zone/entry_s", zone_config_.entry_s, 0.0);
         pnh_.param("zone/high_speed_start_s", zone_config_.high_speed_start_s, 0.0);
@@ -285,7 +334,6 @@ private:
         pnh_.param("zone/system_delay", zone_config_.system_delay, 0.3);
 
         rate_hz_ = std::max(1.0, rate_hz_);
-        relative_speed_alpha_ = clamp(relative_speed_alpha_, 0.0, 1.0);
     }
 
     void globalPathCallback(const nav_msgs::Path::ConstPtr& msg)
@@ -351,8 +399,24 @@ private:
 
     void localPathCallback(const nav_msgs::Path::ConstPtr& msg)
     {
+        if (msg->poses.size() < 2) {
+            local_path_ready_ = false;
+            ROS_ERROR_THROTTLE(1.0, "[highway_planner] local path has fewer than two points");
+            return;
+        }
+        if (msg->header.frame_id != expected_local_path_frame_) {
+            local_path_ready_ = false;
+            ROS_ERROR_THROTTLE(
+                1.0,
+                "[highway_planner] expected local path frame '%s', got '%s'",
+                expected_local_path_frame_.c_str(),
+                msg->header.frame_id.c_str());
+            return;
+        }
+
         local_path_ = *msg;
-        local_path_ready_ = !local_path_.poses.empty();
+        last_local_path_stamp_ = ros::Time::now();
+        local_path_ready_ = true;
     }
 
     void odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
@@ -380,74 +444,43 @@ private:
         status_received_ = true;
     }
 
+    void currentPathCallback(const std_msgs::Int32::ConstPtr& msg)
+    {
+        if (msg->data != 1 && msg->data != 2) {
+            current_path_ready_ = false;
+            following_planner_.reset();
+            ROS_WARN_THROTTLE(
+                1.0,
+                "[highway_planner] current path must be 1 or 2, got %d",
+                msg->data);
+            return;
+        }
+
+        if (current_path_ready_ && current_path_ != msg->data) {
+            following_planner_.reset();
+        }
+        current_path_ = msg->data;
+        current_path_ready_ = true;
+    }
+
     void objectsCallback(const katri_msgs::Objects::ConstPtr& msg)
     {
         const ros::Time now = ros::Time::now();
         last_objects_stamp_ = now;
 
-        double nearest_distance = std::numeric_limits<double>::infinity();
+        std::vector<highway_planner::ObjectObservation> observations;
+        observations.reserve(msg->objects.size());
         for (const auto& object : msg->objects) {
-            const bool same_path = object.path_number == leader_path_number_;
-            const bool in_front =
-                object.distance > 0.0 || object.obj_position == "front";
-            if (same_path &&
-                in_front &&
-                object.distance > 0.0 &&
-                object.distance <= leader_maximum_distance_) {
-                nearest_distance = std::min(nearest_distance, object.distance);
-            }
+            observations.push_back(
+                {object.path_number, object.distance});
         }
 
-        if (!std::isfinite(nearest_distance)) {
-            return;
+        if (current_path_ready_) {
+            following_planner_.observe(
+                observations,
+                current_path_,
+                now.toSec());
         }
-
-        double relative_speed = 0.0;
-        if (leader_measurement_valid_) {
-            const double dt = (now - leader_measurement_stamp_).toSec();
-            if (dt > 1e-3) {
-                const double predicted_distance =
-                    leader_distance_ + leader_relative_speed_ * dt;
-                const bool same_leader =
-                    std::fabs(nearest_distance - predicted_distance) <=
-                    leader_switch_distance_;
-                if (same_leader) {
-                    const double measured_relative_speed = clamp(
-                        (nearest_distance - leader_distance_) / dt,
-                        -maximum_relative_speed_,
-                        maximum_relative_speed_);
-                    relative_speed =
-                        leader_relative_speed_ +
-                        relative_speed_alpha_ *
-                            (measured_relative_speed - leader_relative_speed_);
-                }
-            }
-        }
-
-        leader_distance_ = nearest_distance;
-        leader_relative_speed_ = relative_speed;
-        leader_measurement_stamp_ = now;
-        leader_measurement_valid_ = true;
-    }
-
-    highway_planner::LeaderObservation leaderObservation(const ros::Time& now) const
-    {
-        highway_planner::LeaderObservation leader;
-        if (!leader_measurement_valid_) {
-            return leader;
-        }
-
-        const double age = (now - leader_measurement_stamp_).toSec();
-        if (age > leader_hold_time_) {
-            return leader;
-        }
-
-        leader.valid = true;
-        leader.relative_speed = leader_relative_speed_;
-        leader.distance = std::max(
-            0.0,
-            leader_distance_ + leader_relative_speed_ * age);
-        return leader;
     }
 
     bool baseInputsReady() const
@@ -455,13 +488,15 @@ private:
         return route_ready_ &&
                local_path_ready_ &&
                odom_ready_ &&
-               speed_ready_;
+               speed_ready_ &&
+               current_path_ready_;
     }
 
     bool inputsTimedOut(const ros::Time& now) const
     {
         return (now - last_odom_stamp_).toSec() > input_timeout_ ||
                (now - last_speed_stamp_).toSec() > input_timeout_ ||
+               (now - last_local_path_stamp_).toSec() > local_path_timeout_ ||
                (require_vehicle_status_ && !vehicle_status_valid_);
     }
 
@@ -470,6 +505,7 @@ private:
                  const highway_planner::ZoneResult& zone,
                  const std::string& behavior,
                  const double target_speed,
+                 const double hard_speed_limit,
                  const double ttc,
                  const bool emergency)
     {
@@ -480,6 +516,10 @@ private:
         std_msgs::Float64 speed_msg;
         speed_msg.data = target_speed;
         target_speed_pub_.publish(speed_msg);
+
+        std_msgs::Float64 hard_speed_limit_msg;
+        hard_speed_limit_msg.data = hard_speed_limit;
+        hard_speed_limit_pub_.publish(hard_speed_limit_msg);
 
         std_msgs::String zone_msg;
         zone_msg.data = highway_planner::toString(zone.state);
@@ -503,11 +543,12 @@ private:
 
         ROS_INFO_THROTTLE(
             1.0,
-            "[highway_planner] s=%.1f zone=%s behavior=%s speed=%.2f m/s ttc=%.2f emergency=%d",
+            "[highway_planner] s=%.1f zone=%s behavior=%s speed=%.2f limit=%.2f m/s ttc=%.2f emergency=%d",
             current_s,
             zone_msg.data.c_str(),
             behavior.c_str(),
             target_speed,
+            hard_speed_limit,
             ttc,
             emergency ? 1 : 0);
     }
@@ -523,6 +564,7 @@ private:
             "STOP_" + reason,
             0.0,
             0.0,
+            0.0,
             true);
     }
 
@@ -533,9 +575,11 @@ private:
     ros::Subscriber odom_sub_;
     ros::Subscriber speed_sub_;
     ros::Subscriber status_valid_sub_;
+    ros::Subscriber current_path_sub_;
     ros::Subscriber objects_sub_;
     ros::Publisher target_path_pub_;
     ros::Publisher target_speed_pub_;
+    ros::Publisher hard_speed_limit_pub_;
     ros::Publisher zone_state_pub_;
     ros::Publisher behavior_state_pub_;
     ros::Publisher emergency_pub_;
@@ -546,10 +590,12 @@ private:
     std::string local_path_topic_;
     std::string odom_topic_;
     std::string speed_topic_;
+    std::string current_path_topic_;
     std::string status_valid_topic_;
     std::string objects_topic_;
     std::string target_path_topic_;
     std::string target_speed_topic_;
+    std::string hard_speed_limit_topic_;
     std::string zone_state_topic_;
     std::string behavior_state_topic_;
     std::string emergency_topic_;
@@ -559,7 +605,7 @@ private:
     highway_planner::RouteModel route_;
     highway_planner::ZoneConfig zone_config_;
     highway_planner::ZonePlanner zone_planner_;
-    highway_planner::LongitudinalPlanner longitudinal_planner_;
+    highway_planner::FollowingPlanner following_planner_;
     highway_planner::SpeedCommandFilter speed_filter_;
     nav_msgs::Path local_path_;
 
@@ -567,7 +613,9 @@ private:
     bool require_vehicle_status_ = true;
     bool require_objects_ = false;
     double input_timeout_ = 0.5;
+    double local_path_timeout_ = 0.5;
     double objects_timeout_ = 0.5;
+    std::string expected_local_path_frame_ = "base_link";
 
     bool route_circular_ = true;
     int curvature_half_window_ = 10;
@@ -581,17 +629,11 @@ private:
     double curve_lookahead_distance_ = 100.0;
     double curve_planned_deceleration_ = 2.5;
 
-    int leader_path_number_ = 1;
-    double leader_maximum_distance_ = 120.0;
-    double leader_hold_time_ = 0.3;
-    double leader_switch_distance_ = 8.0;
-    double relative_speed_alpha_ = 0.3;
-    double maximum_relative_speed_ = 30.0;
-
     bool route_ready_ = false;
     bool local_path_ready_ = false;
     bool odom_ready_ = false;
     bool speed_ready_ = false;
+    bool current_path_ready_ = false;
     bool status_received_ = false;
     bool vehicle_status_valid_ = false;
 
@@ -599,15 +641,13 @@ private:
     double ego_y_ = 0.0;
     double ego_yaw_ = 0.0;
     double ego_speed_ = 0.0;
+    int current_path_ = 0;
     int route_index_ = -1;
     ros::Time last_odom_stamp_;
     ros::Time last_speed_stamp_;
+    ros::Time last_local_path_stamp_;
     ros::Time last_objects_stamp_;
 
-    bool leader_measurement_valid_ = false;
-    double leader_distance_ = 0.0;
-    double leader_relative_speed_ = 0.0;
-    ros::Time leader_measurement_stamp_;
 };
 
 int main(int argc, char** argv)

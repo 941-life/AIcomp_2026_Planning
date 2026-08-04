@@ -6,14 +6,16 @@
 rate_hz: 20.0
 
 global_path_topic: /global_path1
-local_path_topic: /local_path1
-odom_topic: /gps_utm_odom
+local_path_topic: /selected_path
+odom_topic: /odometry/filtered
 speed_topic: /current_speed
-status_valid_topic: /vehicle_status_valid
+current_path_topic: /current_path
+status_valid_topic: /vehicle/status_valid
 objects_topic: /obstacle_path_info
 
 target_path_topic: /highway/target_path
 target_speed_topic: /highway/target_speed
+hard_speed_limit_topic: /highway/hard_speed_limit
 zone_state_topic: /highway/zone_state
 behavior_state_topic: /highway/behavior_state
 emergency_topic: /highway/emergency_stop
@@ -25,7 +27,9 @@ require_vehicle_status: true
 # continuously, including empty arrays.
 require_objects: false
 input_timeout: 0.5
+local_path_timeout: 0.5
 objects_timeout: 0.5
+expected_local_path_frame: base_link
 
 route:
   circular: true
@@ -54,11 +58,9 @@ zone:
   limit_margin: 10.0
   system_delay: 0.3
 
-# V1 uses only fields already consumed by the existing code:
-# path_number, distance and obj_position. Relative speed is estimated from the
+# Following uses path_number and distance. Relative speed is estimated from the
 # nearest leader's filtered distance change; no unverified object fields are used.
 leader:
-  path_number: 1
   maximum_distance: 120.0
   hold_time: 0.3
   switch_distance: 8.0

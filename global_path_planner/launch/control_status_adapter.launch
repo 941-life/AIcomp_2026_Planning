@@ -6,7 +6,7 @@
   <!-- Control outputs -->
   <arg name="heading_topic" default="/heading" />
   <arg name="current_speed_topic" default="/current_speed" />
-  <arg name="status_valid_topic" default="/vehicle_status_valid" />
+  <arg name="status_valid_topic" default="/vehicle/status_valid" />
   <arg name="status_timeout" default="0.5" />
 
   <!-- MORAI UDP EgoVehicleStatus input units. Outputs are /heading rad and /current_speed m/s. -->

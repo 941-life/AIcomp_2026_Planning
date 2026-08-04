@@ -348,57 +348,6 @@ ZoneResult ZonePlanner::evaluate(const double current_s,
     return result;
 }
 
-LongitudinalResult LongitudinalPlanner::plan(
-    const double ego_speed,
-    const double free_flow_speed,
-    const LeaderObservation& leader) const
-{
-    LongitudinalResult result;
-    result.target_speed = std::max(0.0, free_flow_speed);
-
-    if (!leader.valid) {
-        return result;
-    }
-
-    result.following = true;
-    const double gap = std::max(0.0, leader.distance);
-    const double closing_speed = std::max(0.0, -leader.relative_speed);
-    const double leader_speed = std::max(0.0, ego_speed + leader.relative_speed);
-    const double desired_gap = config_.standstill_gap + config_.time_headway * ego_speed;
-
-    if (closing_speed > 1e-3) {
-        result.ttc = gap / closing_speed;
-        const double braking_gap = std::max(0.1, gap - config_.minimum_gap);
-        result.required_deceleration =
-            closing_speed * closing_speed / (2.0 * braking_gap);
-    }
-
-    result.emergency =
-        gap <= config_.minimum_gap ||
-        result.ttc <= config_.emergency_ttc ||
-        result.required_deceleration >= config_.emergency_deceleration;
-    if (result.emergency) {
-        result.target_speed = 0.0;
-        return result;
-    }
-
-    double acceleration =
-        config_.gap_gain * (gap - desired_gap) +
-        config_.relative_speed_gain * leader.relative_speed;
-    acceleration = clamp(
-        acceleration,
-        -config_.comfortable_deceleration,
-        config_.maximum_acceleration);
-
-    const double acc_speed = std::max(
-        0.0,
-        std::min(
-            leader_speed + config_.gap_gain * std::max(0.0, gap - desired_gap),
-            ego_speed + acceleration * config_.response_time));
-    result.target_speed = std::min(result.target_speed, acc_speed);
-    return result;
-}
-
 void SpeedCommandFilter::reset(const double speed)
 {
     initialized_ = true;
@@ -406,14 +355,20 @@ void SpeedCommandFilter::reset(const double speed)
     acceleration_ = 0.0;
 }
 
-double SpeedCommandFilter::update(const double raw_target_speed, const double dt)
+double SpeedCommandFilter::update(const double desired_speed,
+                                  const double hard_speed_limit,
+                                  const double dt)
 {
-    const double target = std::max(0.0, raw_target_speed);
+    const double target = std::max(0.0, desired_speed);
+    const double speed_limit = std::max(0.0, hard_speed_limit);
     if (!initialized_) {
-        reset(target);
+        reset(std::min(target, speed_limit));
         return speed_;
     }
     if (dt <= 0.0) {
+        if (speed_ > speed_limit) {
+            reset(speed_limit);
+        }
         return speed_;
     }
 
@@ -436,6 +391,11 @@ double SpeedCommandFilter::update(const double raw_target_speed, const double dt
         acceleration_ = 0.0;
     } else {
         speed_ = next_speed;
+    }
+
+    if (speed_ > speed_limit) {
+        speed_ = speed_limit;
+        acceleration_ = 0.0;
     }
     return speed_;
 }

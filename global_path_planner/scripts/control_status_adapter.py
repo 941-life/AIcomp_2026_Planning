@@ -31,7 +31,7 @@ class ControlStatusAdapter:
         self.ego_status_topic = rospy.get_param("~ego_status_topic", "/morai/ego_vehicle_status")
         self.heading_topic = rospy.get_param("~heading_topic", "/heading")
         self.current_speed_topic = rospy.get_param("~current_speed_topic", "/current_speed")
-        self.status_valid_topic = rospy.get_param("~status_valid_topic", "/vehicle_status_valid")
+        self.status_valid_topic = rospy.get_param("~status_valid_topic", "/vehicle/status_valid")
 
         self.heading_input_unit = rospy.get_param("~heading_input_unit", "deg").lower()
         self.speed_input_unit = rospy.get_param("~speed_input_unit", "kph").lower()
