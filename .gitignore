@@ -14,3 +14,12 @@ global_path_planner/path_data/plot/
 ai_comp_2026-master/
 대회규정.txt
 lqr_control_inspected/
+highway_adas/build/
+highway_adas/build-*/
+
+# Local map analysis and rendered diagnostics
+/.tmp/
+/*.jpg
+/*.png
+/baseline_map_check/
+/region_map_render/
