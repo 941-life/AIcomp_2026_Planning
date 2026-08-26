@@ -1,0 +1,22 @@
+<launch>
+  <arg name="odom_topic" default="/odometry/filtered" />
+  <arg name="objects_topic" default="/objects" />
+  <arg name="speed_topic" default="/current_speed" />
+  <arg name="output_path_topic" default="/highway/selected_path_with_speed" />
+
+  <include file="$(find highway_adas_ros)/launch/lane_centerlines.launch" />
+
+  <node pkg="highway_adas_ros" type="highway_region_manager.py"
+        name="highway_region_manager" output="screen" required="true">
+    <rosparam command="load"
+              file="$(find highway_adas_ros)/config/highway_regions.yaml" />
+    <param name="odom_topic" value="$(arg odom_topic)" />
+  </node>
+
+  <include file="$(find highway_adas_ros)/launch/highway_adas.launch">
+    <arg name="odom_topic" value="$(arg odom_topic)" />
+    <arg name="objects_topic" value="$(arg objects_topic)" />
+    <arg name="speed_topic" value="$(arg speed_topic)" />
+    <arg name="output_path_topic" value="$(arg output_path_topic)" />
+  </include>
+</launch>

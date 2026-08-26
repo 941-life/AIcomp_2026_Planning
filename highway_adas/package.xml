@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>highway_adas</name>
+  <version>0.1.0</version>
+  <description>ROS-independent highway ADAS decision core.</description>
+
+  <maintainer email="a@todo.todo">KATRI Team</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <export />
+</package>

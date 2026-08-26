@@ -16,6 +16,7 @@ ai_comp_2026-master/
 lqr_control_inspected/
 highway_adas/build/
 highway_adas/build-*/
+/build_win/
 
 # Local map analysis and rendered diagnostics
 /.tmp/

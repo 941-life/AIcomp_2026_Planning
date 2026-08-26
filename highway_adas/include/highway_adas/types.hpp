@@ -57,6 +57,7 @@ struct AdasInput {
   EgoState ego;
   std::vector<ObjectDetection> detections;
   // A fresh empty frame is different from a missing perception frame.
+  bool perception_healthy = false;
   double detection_stamp_sec = 0.0;
   // Ego pose interpolated at detection_stamp_sec. Required for base_link -> map conversion.
   EgoState detection_ego;

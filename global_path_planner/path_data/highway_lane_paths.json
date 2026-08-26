@@ -1,0 +1,49 @@
+{
+  "highway_lane1": {
+    "links": [
+      "A2256W000418",
+      "A2256W000431",
+      "A2256W000435",
+      "A2256W000423",
+      "A2256W000432",
+      "A2256W000427",
+      "A2256W000444"
+    ],
+    "point_count": 1527,
+    "length_m": 761.506,
+    "maximum_spacing_m": 0.5
+  },
+  "highway_lane2": {
+    "links": [
+      "A2256W000410",
+      "A2256W000430",
+      "A2256W000434",
+      "A2256W000422",
+      "A2256W000153",
+      "A2256W000451",
+      "A2256W000446"
+    ],
+    "point_count": 1487,
+    "length_m": 740.627,
+    "maximum_spacing_m": 0.5
+  },
+  "highway_lane3": {
+    "links": [
+      "A2256W000409",
+      "A2256W000420",
+      "A2256W000408",
+      "A2256W000445"
+    ],
+    "point_count": 953,
+    "length_m": 474.771,
+    "maximum_spacing_m": 0.5
+  },
+  "highway_lane4": {
+    "links": [
+      "A2256W000411"
+    ],
+    "point_count": 336,
+    "length_m": 167.413,
+    "maximum_spacing_m": 0.5
+  }
+}

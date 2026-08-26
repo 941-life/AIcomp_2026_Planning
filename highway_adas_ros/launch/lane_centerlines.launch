@@ -1,0 +1,48 @@
+<launch>
+  <arg name="path_package" default="global_path_planner" />
+  <arg name="path_folder" default="path_data" />
+  <arg name="lane1_file" default="highway_lane1" />
+  <arg name="lane2_file" default="highway_lane2" />
+  <arg name="lane3_file" default="highway_lane3" />
+  <arg name="lane4_file" default="highway_lane4" />
+
+  <node pkg="global_path_planner" type="global_path_publisher.py"
+        name="highway_lane1_publisher" output="screen">
+    <param name="package_name" value="$(arg path_package)" />
+    <param name="folder_name" value="$(arg path_folder)" />
+    <param name="file_name" value="$(arg lane1_file)" />
+    <param name="topic_name" value="/highway/lane1_centerline" />
+    <param name="frame_id" value="map" />
+    <param name="latch" value="true" />
+  </node>
+
+  <node pkg="global_path_planner" type="global_path_publisher.py"
+        name="highway_lane2_publisher" output="screen">
+    <param name="package_name" value="$(arg path_package)" />
+    <param name="folder_name" value="$(arg path_folder)" />
+    <param name="file_name" value="$(arg lane2_file)" />
+    <param name="topic_name" value="/highway/lane2_centerline" />
+    <param name="frame_id" value="map" />
+    <param name="latch" value="true" />
+  </node>
+
+  <node pkg="global_path_planner" type="global_path_publisher.py"
+        name="highway_lane3_publisher" output="screen">
+    <param name="package_name" value="$(arg path_package)" />
+    <param name="folder_name" value="$(arg path_folder)" />
+    <param name="file_name" value="$(arg lane3_file)" />
+    <param name="topic_name" value="/highway/lane3_centerline" />
+    <param name="frame_id" value="map" />
+    <param name="latch" value="true" />
+  </node>
+
+  <node pkg="global_path_planner" type="global_path_publisher.py"
+        name="highway_lane4_publisher" output="screen">
+    <param name="package_name" value="$(arg path_package)" />
+    <param name="folder_name" value="$(arg path_folder)" />
+    <param name="file_name" value="$(arg lane4_file)" />
+    <param name="topic_name" value="/highway/lane4_centerline" />
+    <param name="frame_id" value="map" />
+    <param name="latch" value="true" />
+  </node>
+</launch>

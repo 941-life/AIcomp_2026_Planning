@@ -25,6 +25,9 @@ void AdasPlanner::reset() {
   tracker_.reset();
   lane_change_.reset();
   last_detection_stamp_sec_ = -1.0;
+  current_lane_id_ = -1;
+  lane_candidate_id_ = -1;
+  lane_candidate_since_sec_ = -1.0;
 }
 
 const LanePath* AdasPlanner::findLane(const std::vector<LanePath>& lanes, int lane_id) const {
@@ -35,9 +38,10 @@ const LanePath* AdasPlanner::findLane(const std::vector<LanePath>& lanes, int la
 }
 
 int AdasPlanner::currentLaneId(const EgoState& ego,
-                               const std::vector<LanePath>& lanes) const {
+                               const std::vector<LanePath>& lanes) {
   int best_lane_id = -1;
   double best_distance = std::numeric_limits<double>::infinity();
+  double current_distance = std::numeric_limits<double>::infinity();
   for (const LanePath& lane : lanes) {
     const Polyline path(lane.centerline_map);
     const PathProjection projection = path.project(ego.position_map);
@@ -47,8 +51,37 @@ int AdasPlanner::currentLaneId(const EgoState& ego,
       best_distance = projection.distance_m;
       best_lane_id = lane.id;
     }
+    if (lane.id == current_lane_id_) current_distance = projection.distance_m;
   }
-  return best_lane_id;
+  if (best_lane_id < 0) {
+    lane_candidate_id_ = -1;
+    lane_candidate_since_sec_ = -1.0;
+    return -1;
+  }
+  if (current_lane_id_ < 0 || !std::isfinite(current_distance)) {
+    current_lane_id_ = best_lane_id;
+    lane_candidate_id_ = -1;
+    lane_candidate_since_sec_ = -1.0;
+    return current_lane_id_;
+  }
+  if (best_lane_id == current_lane_id_ ||
+      best_distance + config_.lane_switch_advantage_m >= current_distance) {
+    lane_candidate_id_ = -1;
+    lane_candidate_since_sec_ = -1.0;
+    return current_lane_id_;
+  }
+  if (lane_candidate_id_ != best_lane_id) {
+    lane_candidate_id_ = best_lane_id;
+    lane_candidate_since_sec_ = ego.stamp_sec;
+    return current_lane_id_;
+  }
+  if (ego.stamp_sec - lane_candidate_since_sec_ >=
+      config_.lane_switch_hold_sec) {
+    current_lane_id_ = best_lane_id;
+    lane_candidate_id_ = -1;
+    lane_candidate_since_sec_ = -1.0;
+  }
+  return current_lane_id_;
 }
 
 LongitudinalResult AdasPlanner::moreRestrictive(
@@ -74,7 +107,8 @@ AdasOutput AdasPlanner::update(const AdasInput& input) {
     return output;
   }
 
-  if (input.detection_stamp_sec > last_detection_stamp_sec_) {
+  if (input.perception_healthy && input.detection_stamp_sec > 0.0 &&
+      input.detection_stamp_sec > last_detection_stamp_sec_) {
     if (!std::isfinite(input.detection_ego.stamp_sec) ||
         std::abs(input.detection_ego.stamp_sec - input.detection_stamp_sec) > 0.05) {
       output.reason = "detection-synchronized ego pose is required";
@@ -88,9 +122,12 @@ AdasOutput AdasPlanner::update(const AdasInput& input) {
   const std::vector<TrackedObject> all_tracks =
       tracker_.tracks(input.ego.stamp_sec, false);
 
+  const double effective_perception_stamp_sec =
+      input.perception_healthy ? input.detection_stamp_sec : 0.0;
   LaneChangeStep lateral = lane_change_.update(
       input.ego, physical_lane_id, input.lanes, confirmed_tracks,
-      input.detection_stamp_sec, input.lane_request, input.cruise_speed_mps);
+      effective_perception_stamp_sec, input.lane_request,
+      input.cruise_speed_mps);
 
   LongitudinalResult longitudinal = following_.plan(
       input.ego, *physical_lane, confirmed_tracks, input.cruise_speed_mps);
@@ -119,7 +156,8 @@ AdasOutput AdasPlanner::update(const AdasInput& input) {
     longitudinal = immediate_hazard;
   }
 
-  const bool perception_fresh = input.detection_stamp_sec > 0.0 &&
+  const bool perception_fresh = input.perception_healthy &&
+                                input.detection_stamp_sec > 0.0 &&
                                 input.ego.stamp_sec >= input.detection_stamp_sec &&
                                 input.ego.stamp_sec - input.detection_stamp_sec <=
                                     config_.lane_change.perception_timeout_sec;

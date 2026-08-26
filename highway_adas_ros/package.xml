@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>highway_adas_ros</name>
+  <version>0.1.0</version>
+  <description>ROS adapter and MORAI validation tools for highway_adas.</description>
+
+  <maintainer email="a@todo.todo">KATRI Team</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <depend>gadis_perception_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>highway_adas</depend>
+  <depend>nav_msgs</depend>
+  <depend>roscpp</depend>
+  <depend>rospy</depend>
+  <depend>std_msgs</depend>
+
+  <exec_depend>global_path_planner</exec_depend>
+
+  <export />
+</package>

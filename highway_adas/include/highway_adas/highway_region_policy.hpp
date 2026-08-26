@@ -10,17 +10,19 @@ namespace highway_adas {
 
 enum class HighwayRegion {
   NONE = 0,
-  HW_ENTRY_ACQUIRE,
+  HW_ENTRY,
   HW_ENTRY_GUARD,
-  HW_MAIN_ACQUIRE,
-  HW_MAIN_GUARD,
-  HW_SINGLE_LANE
+  HW_MAIN,
+  HW_MAIN_GUARD_1,
+  HW_MAIN_GUARD_2,
+  HW_TOLL
 };
 
 struct HighwayRegionConfig {
   int first_lane_id = 1;
   int second_lane_id = 2;
   int third_lane_id = 3;
+  int fourth_lane_id = 4;
 
   double entry_target_speed_mps = 70.0 / 3.6;
   double entry_speed_cap_mps = 80.0 / 3.6;
@@ -61,15 +63,16 @@ class HighwayRegionPolicy {
   HighwayRegionOutput evaluate(const HighwayRegionInput& input) const;
 
  private:
-  HighwayRegionOutput acquirePolicy(const HighwayRegionInput& input,
-                                    int source_lane_id,
-                                    int target_lane_id,
-                                    double target_speed_mps,
-                                    double speed_cap_mps,
-                                    bool guard) const;
+  HighwayRegionOutput baseOutput(double target_speed_mps,
+                                 double speed_cap_mps,
+                                 int required_lane_id) const;
+  LaneRequest requestToward(int current_lane_id,
+                            int target_lane_id,
+                            LaneRequestType type) const;
   double stoppingSpeedCap(double ego_speed_mps,
                           double distance_to_stop_m) const;
-  double nextLimitSpeedCap(double distance_to_limit_m) const;
+  double nextLimitSpeedCap(double ego_speed_mps,
+                           double distance_to_limit_m) const;
 
   HighwayRegionConfig config_;
 };

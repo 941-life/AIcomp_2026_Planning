@@ -265,14 +265,14 @@ void testCommittedRearThreatDoesNotRequestDeceleration() {
 void testHighwayRegionPolicy() {
   adas::HighwayRegionPolicy policy;
   adas::HighwayRegionInput input;
-  input.region = adas::HighwayRegion::HW_ENTRY_ACQUIRE;
-  input.current_lane_id = 3;
+  input.region = adas::HighwayRegion::HW_ENTRY;
+  input.current_lane_id = 4;
   input.ego_speed_mps = 70.0 / 3.6;
   auto output = policy.evaluate(input);
   expectTrue(output.valid &&
                  output.lane_request.type == adas::LaneRequestType::MANDATORY &&
-                 output.lane_request.target_lane_id == 2,
-             "entry acquire requests lane 2 from lane 3");
+                 output.lane_request.target_lane_id == 3,
+             "entry acquire requests lane 3 from lane 4");
 
   input.region = adas::HighwayRegion::HW_ENTRY_GUARD;
   input.distance_to_guard_stop_m = 50.0;
@@ -280,31 +280,90 @@ void testHighwayRegionPolicy() {
   expectTrue(output.guard_active && output.speed_cap_mps < 70.0 / 3.6,
              "entry guard applies a stop-line speed profile after failure");
 
-  input.region = adas::HighwayRegion::HW_MAIN_ACQUIRE;
-  input.current_lane_id = 2;
+  input.region = adas::HighwayRegion::HW_MAIN;
+  input.current_lane_id = 3;
   input.ego_speed_mps = 100.0 / 3.6;
   output = policy.evaluate(input);
-  expectTrue(output.lane_request.type == adas::LaneRequestType::MANDATORY &&
-                 output.lane_request.target_lane_id == 1,
-             "main acquire makes lane 1 mandatory");
+  expectTrue(output.lane_request.type == adas::LaneRequestType::STRATEGIC &&
+                 output.lane_request.target_lane_id == 2,
+             "main moves strategically from lane 3 toward lane 1");
 
-  input.region = adas::HighwayRegion::HW_MAIN_GUARD;
+  input.current_lane_id = 2;
+  output = policy.evaluate(input);
+  expectTrue(output.lane_request.type == adas::LaneRequestType::STRATEGIC &&
+                 output.lane_request.target_lane_id == 1,
+             "main acquire requests lane 1 after settling in lane 2");
+
+  input.region = adas::HighwayRegion::HW_MAIN_GUARD_1;
+  input.current_lane_id = 3;
   input.distance_to_guard_stop_m = 100.0;
   output = policy.evaluate(input);
-  expectTrue(output.guard_active && output.speed_cap_mps < 100.0 / 3.6,
-             "main guard slows before the disappearing lane");
+  expectTrue(output.guard_active &&
+                 output.lane_request.type == adas::LaneRequestType::MANDATORY &&
+                 output.lane_request.target_lane_id == 2 &&
+                 output.speed_cap_mps < 100.0 / 3.6,
+             "main guard 1 makes the 3 to 2 merge mandatory");
 
-  input.region = adas::HighwayRegion::HW_SINGLE_LANE;
+  input.current_lane_id = 2;
+  output = policy.evaluate(input);
+  expectTrue(!output.guard_active &&
+                 output.lane_request.type == adas::LaneRequestType::STRATEGIC &&
+                 output.lane_request.target_lane_id == 1,
+             "main guard 1 keeps lane 1 acquisition strategic after lane 3 exit");
+
+  input.region = adas::HighwayRegion::HW_MAIN_GUARD_2;
+  output = policy.evaluate(input);
+  expectTrue(output.guard_active &&
+                 output.lane_request.type == adas::LaneRequestType::MANDATORY &&
+                 output.lane_request.target_lane_id == 1,
+             "main guard 2 makes the 2 to 1 merge mandatory");
+
+  input.current_lane_id = 3;
+  output = policy.evaluate(input);
+  expectTrue(output.guard_active &&
+                 output.lane_request.type == adas::LaneRequestType::MANDATORY &&
+                 output.lane_request.target_lane_id == 2,
+             "main guard 2 recovers sequentially without a two-lane jump");
+
+  input.region = adas::HighwayRegion::HW_TOLL;
   input.current_lane_id = 1;
   input.distance_to_next_limit_m = 0.0;
   output = policy.evaluate(input);
   expectNear(output.speed_cap_mps, 60.0 / 3.6, 1e-9,
-             "single-lane handoff reaches the next 60 kph limit");
+             "toll region reaches the next 60 kph limit");
+  expectTrue(output.lane_request.type == adas::LaneRequestType::KEEP_LANE,
+             "toll region locks the single lane corridor");
 
   input.current_lane_id = 2;
   output = policy.evaluate(input);
   expectTrue(!output.valid,
-             "single-lane region rejects an uncompleted lane-1 acquisition");
+             "toll region rejects an uncompleted lane-1 acquisition");
+}
+
+void testLaneClassificationHysteresis() {
+  adas::AdasConfig config;
+  config.lane_switch_advantage_m = 0.4;
+  config.lane_switch_hold_sec = 0.3;
+  adas::AdasPlanner planner(config);
+  const auto lanes = twoLanes();
+
+  adas::EgoState state = ego(10.0, 0.0, 20.0, 1.0);
+  expectTrue(planner.currentLaneId(state, lanes) == 1,
+             "lane classifier initializes on the nearest lane");
+
+  state.position_map.y = 2.2;
+  state.stamp_sec = 1.1;
+  expectTrue(planner.currentLaneId(state, lanes) == 1,
+             "lane classifier does not switch on one sample");
+
+  state.stamp_sec = 1.45;
+  expectTrue(planner.currentLaneId(state, lanes) == 2,
+             "lane classifier switches after a sustained distance advantage");
+
+  state.position_map.y = 20.0;
+  state.stamp_sec = 1.6;
+  expectTrue(planner.currentLaneId(state, lanes) == -1,
+             "lane classifier rejects a pose outside every lane corridor");
 }
 
 void testInvalidRequestAndStalePerception() {
@@ -322,6 +381,7 @@ void testInvalidRequestAndStalePerception() {
   adas::AdasPlanner planner;
   adas::AdasInput input;
   input.ego = ego(10.0, 0.0, 100.0 / 3.6, 2.0);
+  input.perception_healthy = true;
   input.detection_stamp_sec = 1.0;
   input.detection_ego = ego(0.0, 0.0, 100.0 / 3.6, 1.0);
   input.lanes = lanes;
@@ -339,8 +399,9 @@ void testInvalidRequestAndStalePerception() {
 void testBaselineFacingDecisionModule() {
   adas::HighwayDecisionModule module;
   adas::HighwayDecisionInput input;
-  input.region = adas::HighwayRegion::HW_MAIN_ACQUIRE;
+  input.region = adas::HighwayRegion::HW_MAIN;
   input.adas.ego = ego(10.0, 3.5, 80.0 / 3.6, 1.0);
+  input.adas.perception_healthy = true;
   input.adas.detection_stamp_sec = 1.0;
   input.adas.detection_ego = input.adas.ego;
   input.adas.lanes = twoLanes();
@@ -349,12 +410,37 @@ void testBaselineFacingDecisionModule() {
   expectTrue(output.valid,
              "baseline-facing wrapper returns a complete highway decision");
   expectTrue(output.region.lane_request.type ==
-                 adas::LaneRequestType::MANDATORY &&
+                 adas::LaneRequestType::STRATEGIC &&
                  output.region.lane_request.target_lane_id == 1,
-             "wrapper converts MAIN_ACQUIRE into a mandatory lane-1 request");
+             "wrapper converts HW_MAIN into a strategic lane-1 request");
   expectTrue(output.adas.lane_change_state ==
                  adas::LaneChangeState::CHECK_GAP,
              "wrapper passes the region request into the lane-change FSM");
+}
+
+void testUnhealthyPerceptionCannotStartLaneChange() {
+  adas::HighwayDecisionModule module;
+  adas::HighwayDecisionInput input;
+  input.region = adas::HighwayRegion::HW_MAIN;
+  input.adas.ego = ego(10.0, 3.5, 80.0 / 3.6, 1.0);
+  input.adas.perception_healthy = false;
+  input.adas.detection_stamp_sec = 1.0;
+  input.adas.detection_ego = input.adas.ego;
+  input.adas.lanes = twoLanes();
+
+  module.update(input);
+  input.adas.ego.stamp_sec = 1.6;
+  input.adas.detection_stamp_sec = 1.6;
+  input.adas.detection_ego = input.adas.ego;
+  const auto output = module.update(input);
+  expectTrue(output.valid,
+             "unhealthy perception keeps a known-lane path available");
+  expectTrue(output.adas.lane_change_state ==
+                 adas::LaneChangeState::CHECK_GAP,
+             "unhealthy perception cannot approve lane-change execution");
+  expectTrue(output.adas.safety_action ==
+                 adas::SafetyAction::STALE_PERCEPTION_HOLD,
+             "unhealthy perception is reported explicitly");
 }
 
 }  // namespace
@@ -369,8 +455,10 @@ int main() {
   testCommittedLaneChangeDoesNotSnapBack();
   testCommittedRearThreatDoesNotRequestDeceleration();
   testHighwayRegionPolicy();
+  testLaneClassificationHysteresis();
   testInvalidRequestAndStalePerception();
   testBaselineFacingDecisionModule();
+  testUnhealthyPerceptionCannotStartLaneChange();
 
   if (failures != 0) {
     std::cerr << failures << " test assertion(s) failed\n";

@@ -84,6 +84,7 @@ endif()
 
 catkin_install_python(PROGRAMS
   scripts/control_status_adapter.py
+  scripts/extract_highway_lane_paths.py
   scripts/gps_imu_fusion.py
   scripts/global_path_publisher.py
   scripts/ll2utm.py

@@ -1,0 +1,12 @@
+<launch>
+  <arg name="scenario" default="empty" />
+
+  <include file="$(find highway_adas_ros)/launch/highway_adas.launch">
+    <arg name="objects_topic" value="/objects" />
+  </include>
+
+  <node pkg="highway_adas_ros" type="synthetic_highway_scene.py"
+        name="synthetic_highway_scene" output="screen" required="true">
+    <param name="scenario" value="$(arg scenario)" />
+  </node>
+</launch>

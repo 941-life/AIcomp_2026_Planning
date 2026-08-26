@@ -1,0 +1,65 @@
+rate_hz: 20.0
+input_timeout_sec: 0.3
+pose_sync_tolerance_sec: 0.05
+odom_history_sec: 2.0
+
+map_frame: map
+base_frame: base_link
+lane_width_m: 3.5
+lane_classification_margin_m: 0.5
+lane_switch_advantage_m: 0.4
+lane_switch_hold_sec: 0.3
+stale_perception_speed_kph: 60.0
+
+lidar_to_base_x_m: 1.144
+lidar_to_base_y_m: 0.0
+lidar_to_base_yaw_rad: 0.0
+minimum_object_dimension_m: 0.2
+maximum_object_dimension_m: 20.0
+
+tracker:
+  association_gate_m: 4.0
+  size_cost_weight: 0.5
+  position_gain: 0.70
+  velocity_gain: 0.20
+  track_timeout_sec: 0.6
+  confirmation_hits: 3
+
+following:
+  minimum_gap_m: 5.0
+  time_headway_sec: 1.8
+  gap_gain_per_sec: 0.35
+  follow_entry_margin_m: 10.0
+  hard_brake_ttc_sec: 3.0
+  emergency_ttc_sec: 1.5
+  hard_brake_decel_mps2: 4.0
+  emergency_decel_mps2: 6.0
+
+lane_change:
+  nominal_duration_sec: 3.0
+  minimum_path_length_m: 45.0
+  maximum_path_length_m: 85.0
+  output_horizon_m: 120.0
+  minimum_gap_m: 6.0
+  minimum_front_ttc_sec: 4.0
+  minimum_rear_ttc_sec: 4.0
+  maximum_start_required_decel_mps2: 2.5
+  perception_timeout_sec: 0.3
+  gap_hold_sec: 0.5
+  selected_gap_hold_sec: 1.5
+  settle_hold_sec: 0.5
+  early_cancel_progress: 0.35
+  gap_shaping_decel_mps2: 2.0
+  gap_shaping_accel_mps2: 1.0
+  minimum_flow_speed_ratio: 0.70
+
+region:
+  entry_target_speed_kph: 70.0
+  entry_speed_cap_kph: 80.0
+  main_target_speed_kph: 100.0
+  main_speed_cap_kph: 100.0
+  next_limit_speed_kph: 60.0
+  guard_deceleration_mps2: 3.0
+  next_limit_deceleration_mps2: 2.5
+  response_time_sec: 0.5
+  stop_margin_m: 5.0

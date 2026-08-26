@@ -1,0 +1,26 @@
+<launch>
+  <arg name="objects_topic" default="/objects" />
+  <arg name="odom_topic" default="/odometry/filtered" />
+  <arg name="speed_topic" default="/current_speed" />
+  <arg name="region_topic" default="/highway/region" />
+  <arg name="lane1_topic" default="/highway/lane1_centerline" />
+  <arg name="lane2_topic" default="/highway/lane2_centerline" />
+  <arg name="lane3_topic" default="/highway/lane3_centerline" />
+  <arg name="lane4_topic" default="/highway/lane4_centerline" />
+  <arg name="output_path_topic" default="/highway/selected_path_with_speed" />
+
+  <node pkg="highway_adas_ros" type="highway_adas_node"
+        name="highway_adas" output="screen" respawn="false">
+    <rosparam command="load" file="$(find highway_adas_ros)/config/highway_adas.yaml" />
+
+    <param name="objects_topic" value="$(arg objects_topic)" />
+    <param name="odom_topic" value="$(arg odom_topic)" />
+    <param name="speed_topic" value="$(arg speed_topic)" />
+    <param name="region_topic" value="$(arg region_topic)" />
+    <param name="lane1_topic" value="$(arg lane1_topic)" />
+    <param name="lane2_topic" value="$(arg lane2_topic)" />
+    <param name="lane3_topic" value="$(arg lane3_topic)" />
+    <param name="lane4_topic" value="$(arg lane4_topic)" />
+    <param name="output_path_topic" value="$(arg output_path_topic)" />
+  </node>
+</launch>
