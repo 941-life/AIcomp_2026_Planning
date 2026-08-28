@@ -66,12 +66,16 @@ HighwayRegionOutput HighwayRegionPolicy::evaluate(
         output.reason = "entry region requires lane 1 through 4";
         return output;
       }
+      const bool must_leave_lane_4 =
+          input.current_lane_id > config_.third_lane_id;
       output.lane_request = requestToward(
-          input.current_lane_id, config_.third_lane_id,
-          LaneRequestType::MANDATORY);
+          input.current_lane_id,
+          must_leave_lane_4 ? config_.third_lane_id : config_.first_lane_id,
+          must_leave_lane_4 ? LaneRequestType::MANDATORY
+                            : LaneRequestType::STRATEGIC);
       output.guard_active =
           input.region == HighwayRegion::HW_ENTRY_GUARD &&
-          input.current_lane_id > config_.third_lane_id;
+          must_leave_lane_4;
       if (output.guard_active) {
         output.speed_cap_mps = std::min(
             output.speed_cap_mps,

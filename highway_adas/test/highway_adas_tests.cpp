@@ -274,7 +274,20 @@ void testHighwayRegionPolicy() {
                  output.lane_request.target_lane_id == 3,
              "entry acquire requests lane 3 from lane 4");
 
+  input.current_lane_id = 3;
+  output = policy.evaluate(input);
+  expectTrue(output.lane_request.type == adas::LaneRequestType::STRATEGIC &&
+                 output.lane_request.target_lane_id == 2,
+             "entry uses an available gap to move from lane 3 toward lane 1");
+
+  input.current_lane_id = 2;
+  output = policy.evaluate(input);
+  expectTrue(output.lane_request.type == adas::LaneRequestType::STRATEGIC &&
+                 output.lane_request.target_lane_id == 1,
+             "entry continues strategic lane-1 acquisition one lane at a time");
+
   input.region = adas::HighwayRegion::HW_ENTRY_GUARD;
+  input.current_lane_id = 4;
   input.distance_to_guard_stop_m = 50.0;
   output = policy.evaluate(input);
   expectTrue(output.guard_active && output.speed_cap_mps < 70.0 / 3.6,
