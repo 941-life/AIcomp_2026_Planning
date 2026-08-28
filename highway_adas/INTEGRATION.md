@@ -42,16 +42,13 @@ if (!output.valid) {
 }
 
 auto local_path = toBaseLinkPath(output.adas.target_path_map, input.adas.ego);
-double speed_mps = std::min(output.target_speed_mps,
-                            baseline_curvature_speed_cap_mps);
-speed_mps = std::min(speed_mps, baseline_next_limit_speed_cap_mps);
-publishPathWithSpeed(local_path, speed_mps * 3.6);
+publishPathWithSpeed(local_path, output.target_speed_mps * 3.6);
 ```
 
 중요 출력:
 
 - `adas.target_path_map`: 현재 차로 또는 고정된 quintic 차로 변경 경로
-- `target_speed_mps`: Region, ACC/AEB, Gap Shaping을 합친 속도
+- `target_speed_mps`: Region, ACC/AEB, Gap Shaping, 곡률 제한을 합친 속도
 - `adas.lane_change_state`: `KEEP_LANE/CHECK_GAP/EXECUTE/SETTLE`
 - `adas.safety_action`: 시작 차단, 조기복귀, 전방 감속, 후방 위협 속도유지 등의 이유
 - `region.guard_active`: 합류 실패로 소멸점 정지 프로파일이 활성화됐는지 여부
@@ -89,9 +86,8 @@ roslaunch highway_adas_ros highway_stack.launch
 
 ## 기존 baseline과 중복 제거
 
-새 ADAS가 앞차 추종을 담당하므로 baseline `SpeedProfiler`의 `use_following`은 `false`로 둔다.
-두 ACC를 동시에 켜면 서로 다른 leader 판정이 중복으로 속도를 제한한다. 곡률 속도와 정적
-장애물 정지는 baseline에서 유지해도 된다.
+새 ADAS가 앞차 추종과 곡률 속도 제한을 모두 담당한다. 별도 baseline profiler를 동시에
+적용하면 제한이 중복되므로 고주로 출력에는 추가 속도 profiler를 연결하지 않는다.
 
 첨부 LQR은 경로점 `pose.position.z`의 km/h 속도를 읽는다. 현재 launch 값이 아래보다 낮으면
 판단의 100 km/h 출력이 제어기에서 잘린다.

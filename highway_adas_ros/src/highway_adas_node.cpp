@@ -150,6 +150,22 @@ class HighwayAdasNode {
     config.stale_perception_speed_mps =
         std::max(0.0, stale_perception_speed_kph / 3.6);
 
+    pnh_.param("curvature/enabled",
+                config.curvature_speed_limit_enabled,
+                config.curvature_speed_limit_enabled);
+    pnh_.param("curvature/sample_distance_m",
+                config.curvature_sample_distance_m,
+                config.curvature_sample_distance_m);
+    pnh_.param("curvature/max_lateral_accel_mps2",
+                config.max_lateral_accel_mps2,
+                config.max_lateral_accel_mps2);
+    pnh_.param("curvature/lookahead_distance_m",
+                config.curvature_lookahead_distance_m,
+                config.curvature_lookahead_distance_m);
+    pnh_.param("curvature/planned_deceleration_mps2",
+                config.curvature_planned_deceleration_mps2,
+                config.curvature_planned_deceleration_mps2);
+
     pnh_.param("following/minimum_gap_m", config.following.minimum_gap_m,
                 config.following.minimum_gap_m);
     pnh_.param("following/time_headway_sec", config.following.time_headway_sec,
@@ -597,6 +613,8 @@ class HighwayAdasNode {
            << " longitudinal="
            << adapter::longitudinalModeName(output.adas.longitudinal.mode)
            << " speed_kph=" << target_speed_kph
+           << " relative_speed_mps="
+           << output.adas.longitudinal.lead.relative_speed_mps
            << " front_gap=" << output.adas.target_gap.front_gap_m
            << " rear_gap=" << output.adas.target_gap.rear_gap_m;
     text.data = stream.str();

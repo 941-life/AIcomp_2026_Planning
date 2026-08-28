@@ -183,16 +183,13 @@ required_decel = closing_speed^2 / (2 * (gap - 5 m))
 
 ```text
 HighwayDecisionOutput.target_speed_mps
-  = min(region_speed_cap, ADAS speed cap)
+  = min(region_speed_cap,
+        following/gap/stale-perception speed cap,
+        curvature speed cap)
 ```
 
-baseline의 곡률 속도와 다음 제한구간 프로파일은 adapter에서 추가로 합성한다.
-
-```text
-final_speed = min(highway.target_speed_mps,
-                  curvature_speed_cap,
-                  baseline_next_limit_cap)
-```
+곡률 제한은 코어가 최종 목표 경로를 기준으로 계산하며, 다음 제한구간 감속은
+Region policy가 합성한다. ROS adapter는 `target_speed_mps`를 다시 제한하지 않는다.
 
 `target_path_map`은 LQR 입력 경로로, 최종 속도는 경로점의 속도 값으로 변환한다. 자세한 연결
 계약은 `INTEGRATION.md`에 있다.

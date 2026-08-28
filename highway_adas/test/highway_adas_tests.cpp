@@ -111,6 +111,32 @@ void testTrackerWithoutPerceptionIds() {
   }
 }
 
+void testCurvatureCapIsCombinedWithAdasSpeed() {
+  adas::AdasConfig config;
+  config.curvature_sample_distance_m = 5.0;
+  config.max_lateral_accel_mps2 = 2.0;
+  config.curvature_lookahead_distance_m = 30.0;
+  config.curvature_planned_deceleration_mps2 = 1.0;
+  adas::AdasPlanner planner(config);
+
+  adas::LanePath lane;
+  lane.id = 1;
+  lane.centerline_map = {{0.0, 0.0}, {10.0, 0.0}, {20.0, 0.0},
+                         {20.0, 10.0}, {20.0, 20.0}};
+  adas::AdasInput input;
+  input.ego = ego(0.0, 0.0, 10.0, 1.0);
+  input.perception_healthy = true;
+  input.detection_stamp_sec = 1.0;
+  input.detection_ego = input.ego;
+  input.lanes = {lane};
+  input.cruise_speed_mps = 30.0;
+
+  const adas::AdasOutput output = planner.update(input);
+  expectTrue(output.valid, "ADAS returns the curved keep-lane path");
+  expectTrue(output.speed_cap_mps < input.cruise_speed_mps,
+             "curvature cap restricts the ADAS target speed");
+}
+
 void testFollowingRules() {
   const adas::LanePath lane = straightLane(1, 0.0, 2, -1);
   adas::FollowingController controller;
@@ -460,6 +486,7 @@ void testUnhealthyPerceptionCannotStartLaneChange() {
 
 int main() {
   testTrackerWithoutPerceptionIds();
+  testCurvatureCapIsCombinedWithAdasSpeed();
   testFollowingRules();
   testSameSpeedTrafficUsesRelativeGap();
   testGapShapingCanAccelerateForRearVehicle();

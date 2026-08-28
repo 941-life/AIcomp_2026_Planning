@@ -17,6 +17,15 @@ lidar_to_base_yaw_rad: 0.0
 minimum_object_dimension_m: 0.2
 maximum_object_dimension_m: 20.0
 
+# Final speed is min(ADAS/relative-speed cap, curvature cap). The curvature
+# profile includes the distance needed to slow down before an upcoming curve.
+curvature:
+  enabled: true
+  sample_distance_m: 5.0
+  max_lateral_accel_mps2: 2.5
+  lookahead_distance_m: 100.0
+  planned_deceleration_mps2: 2.5
+
 tracker:
   association_gate_m: 4.0
   size_cost_weight: 0.5

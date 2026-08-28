@@ -16,6 +16,11 @@ struct AdasConfig {
   double lane_switch_advantage_m = 0.4;
   double lane_switch_hold_sec = 0.3;
   double stale_perception_speed_mps = 60.0 / 3.6;
+  bool curvature_speed_limit_enabled = true;
+  double curvature_sample_distance_m = 5.0;
+  double max_lateral_accel_mps2 = 2.5;
+  double curvature_lookahead_distance_m = 100.0;
+  double curvature_planned_deceleration_mps2 = 2.5;
 };
 
 class AdasPlanner {

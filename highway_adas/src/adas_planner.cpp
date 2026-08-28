@@ -13,6 +13,55 @@ int severity(LongitudinalMode mode) {
   return static_cast<int>(mode);
 }
 
+double curvatureSpeedLimit(const std::vector<Point2>& points,
+                           const Point2& ego_position,
+                           const AdasConfig& config) {
+  if (!config.curvature_speed_limit_enabled) {
+    return std::numeric_limits<double>::infinity();
+  }
+
+  const Polyline path(points);
+  const PathProjection ego = path.project(ego_position);
+  if (!ego.valid || config.curvature_sample_distance_m <= 0.0 ||
+      config.max_lateral_accel_mps2 <= 0.0 ||
+      config.curvature_lookahead_distance_m < 0.0 ||
+      config.curvature_planned_deceleration_mps2 <= 0.0) {
+    return 0.0;
+  }
+
+  double limit = std::numeric_limits<double>::infinity();
+  for (double ahead = 0.0;
+       ahead <= config.curvature_lookahead_distance_m;
+       ahead += config.curvature_sample_distance_m) {
+    const double center_s = ego.s_m + ahead;
+    const PathSample p0 = path.sample(
+        center_s - config.curvature_sample_distance_m);
+    const PathSample p1 = path.sample(center_s);
+    const PathSample p2 = path.sample(
+        center_s + config.curvature_sample_distance_m);
+    if (!p0.valid || !p1.valid || !p2.valid) return 0.0;
+
+    const double denominator =
+        distance(p0.point, p1.point) * distance(p1.point, p2.point) *
+        distance(p0.point, p2.point);
+    if (denominator <= 1e-9) continue;
+
+    const double cross =
+        (p1.point.x - p0.point.x) * (p2.point.y - p0.point.y) -
+        (p1.point.y - p0.point.y) * (p2.point.x - p0.point.x);
+    const double curvature = std::abs(2.0 * cross / denominator);
+    if (curvature <= 1e-6) continue;
+
+    const double curve_speed =
+        std::sqrt(config.max_lateral_accel_mps2 / curvature);
+    limit = std::min(
+        limit,
+        std::sqrt(curve_speed * curve_speed +
+                  2.0 * config.curvature_planned_deceleration_mps2 * ahead));
+  }
+  return limit;
+}
+
 }  // namespace
 
 AdasPlanner::AdasPlanner(const AdasConfig& config)
@@ -178,6 +227,10 @@ AdasOutput AdasPlanner::update(const AdasInput& input) {
       lateral.safety_action = SafetyAction::STALE_PERCEPTION_HOLD;
     }
   }
+
+  const double curvature_speed_cap =
+      curvatureSpeedLimit(lateral.path_map, input.ego.position_map, config_);
+  final_speed_cap = std::min(final_speed_cap, curvature_speed_cap);
 
   output.valid = !lateral.path_map.empty();
   output.request_rejected = lateral.request_rejected;
