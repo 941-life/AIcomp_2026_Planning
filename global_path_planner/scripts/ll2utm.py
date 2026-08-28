@@ -62,8 +62,7 @@ class LocationSensor:
         self.map_frame_id = rospy.get_param("~map_frame_id", "map")
         self.base_frame_id = rospy.get_param("~base_frame_id", "base_link")
         self.zone = int(rospy.get_param("~utm_zone", zone))
-        self.kcity_east_offset = 302459.942
-        self.kcity_north_offset = 4122635.537
+        # Highway and baseline paths are stored in absolute UTM52N.
         self.east_offset = float(rospy.get_param("~east_offset", 0.0))
         self.north_offset = float(rospy.get_param("~north_offset", 0.0))
         self.use_msg_offset = rospy.get_param("~use_msg_offset", False)

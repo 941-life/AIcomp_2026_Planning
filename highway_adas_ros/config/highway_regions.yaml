@@ -1,16 +1,16 @@
 # Initial K-City values projected onto highway_lane1. Calibrate with MORAI logs.
-entry_guard_start_s: 24.0
-entry_guard_stop_s: 122.0
-main_start_s: 167.4
+entry_guard_start_s: 116.5
+entry_guard_stop_s: 214.5
+main_start_s: 259.9
 
-main_guard_1_start_s: 282.0
-main_guard_1_stop_s: 429.0
-main_guard_2_start_s: 474.5
-main_guard_2_stop_s: 605.0
+main_guard_1_start_s: 374.5
+main_guard_1_stop_s: 521.5
+main_guard_2_start_s: 567.0
+main_guard_2_stop_s: 697.5
 
-toll_start_s: 672.0
-next_limit_s: 761.0
-highway_end_s: 761.5
+toll_start_s: 764.5
+next_limit_s: 853.5
+highway_end_s: 854.0
 
 search_window_segments: 250
 maximum_projection_distance_m: 15.0

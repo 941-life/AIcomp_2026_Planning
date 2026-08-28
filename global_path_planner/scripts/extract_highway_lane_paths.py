@@ -13,20 +13,20 @@ LANE_CHAINS = {
     # to a different straight-through movement, so the usable highway group
     # intentionally maps MGeo lanes 2..5 to logical lanes 1..4.
     "highway_lane1": [
-        "A2256W000418", "A2256W000431", "A2256W000435",
+        "A2256W000029", "A2256W000418", "A2256W000431", "A2256W000435",
         "A2256W000423", "A2256W000432", "A2256W000427",
         "A2256W000444",
     ],
     "highway_lane2": [
-        "A2256W000410", "A2256W000430", "A2256W000434",
+        "A2256W000175", "A2256W000410", "A2256W000430", "A2256W000434",
         "A2256W000422", "A2256W000153", "A2256W000451",
         "A2256W000446",
     ],
     "highway_lane3": [
-        "A2256W000409", "A2256W000420", "A2256W000408",
+        "A2256W000406", "A2256W000409", "A2256W000420", "A2256W000408",
         "A2256W000445",
     ],
-    "highway_lane4": ["A2256W000411"],
+    "highway_lane4": ["A2256W000846", "A2256W000411"],
 }
 
 
@@ -34,20 +34,31 @@ def distance(a, b):
     return math.hypot(a[0] - b[0], a[1] - b[1])
 
 
-def load_links(hdmap_dir):
-    path = hdmap_dir / "link_set.json"
-    with path.open("r", encoding="utf-8-sig") as stream:
+def load_map(hdmap_dir):
+    with (hdmap_dir / "link_set.json").open(
+            "r", encoding="utf-8-sig") as stream:
         links = json.load(stream)
-    return {link["idx"]: link for link in links}
+    with (hdmap_dir / "global_info.json").open(
+            "r", encoding="utf-8-sig") as stream:
+        global_info = json.load(stream)
+    origin = global_info.get("local_origin_in_global")
+    if not isinstance(origin, list) or len(origin) < 2:
+        raise ValueError("global_info.json has no local_origin_in_global")
+    return {link["idx"]: link for link in links}, origin
 
 
-def concatenate_chain(name, chain, links, join_tolerance_m):
+def concatenate_chain(name, chain, links, origin, join_tolerance_m):
     points = []
     for link_id in chain:
         if link_id not in links:
             raise KeyError("{}: missing link {}".format(name, link_id))
 
-        link_points = links[link_id]["points"]
+        link_points = [
+            [point[0] + origin[0], point[1] + origin[1],
+             (point[2] if len(point) > 2 else 0.0) +
+             (origin[2] if len(origin) > 2 else 0.0)]
+            for point in links[link_id]["points"]
+        ]
         if len(link_points) < 2:
             raise ValueError("{}: link {} has fewer than two points".format(
                 name, link_id))
@@ -102,13 +113,13 @@ def parse_args():
 
 def main():
     args = parse_args()
-    links = load_links(args.hdmap_dir)
+    links, origin = load_map(args.hdmap_dir)
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     metadata = {}
     for name, chain in LANE_CHAINS.items():
         points = concatenate_chain(
-            name, chain, links, args.join_tolerance_m)
+            name, chain, links, origin, args.join_tolerance_m)
         maximum_spacing = validate_spacing(
             name, points, args.maximum_spacing_m)
         output_path = args.output_dir / (name + ".txt")
@@ -118,6 +129,8 @@ def main():
             "point_count": len(points),
             "length_m": round(path_length(points), 3),
             "maximum_spacing_m": round(maximum_spacing, 3),
+            "coordinate_frame": "UTM52N",
+            "local_origin_in_global": origin,
         }
         print("{}: {} points, {:.1f} m -> {}".format(
             name, len(points), metadata[name]["length_m"], output_path))
