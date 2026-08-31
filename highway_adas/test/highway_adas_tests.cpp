@@ -428,11 +428,43 @@ void testInvalidRequestAndStalePerception() {
   const adas::AdasOutput output = planner.update(input);
   expectTrue(output.valid,
              "stale perception still returns the known keep-lane path");
-  expectNear(output.speed_cap_mps, 60.0 / 3.6, 1e-9,
-             "stale perception blocks new high-speed acceleration");
+  expectNear(output.speed_cap_mps, 0.0, 1e-9,
+             "stale perception commands a fail-safe stop");
   expectTrue(output.safety_action ==
                  adas::SafetyAction::STALE_PERCEPTION_HOLD,
              "stale perception action is explicit");
+}
+
+void testEmergencyBrakeIsLatchedAcrossDroppedTrack() {
+  adas::AdasConfig config;
+  config.tracker.confirmation_hits = 1;
+  config.tracker.track_timeout_sec = 0.05;
+  config.emergency_brake_hold_sec = 1.5;
+  adas::AdasPlanner planner(config);
+
+  adas::AdasInput input;
+  input.ego = ego(10.0, 0.0, 20.0, 1.0);
+  input.perception_healthy = true;
+  input.detection_stamp_sec = 1.0;
+  input.detection_ego = input.ego;
+  input.detections = {{8.0, 0.0, 2.0, 4.5}};
+  input.lanes = {straightLane(1, 0.0, -1, -1)};
+  input.cruise_speed_mps = 100.0 / 3.6;
+
+  const auto emergency = planner.update(input);
+  expectTrue(emergency.longitudinal.mode ==
+                 adas::LongitudinalMode::EMERGENCY_BRAKE &&
+                 emergency.speed_cap_mps == 0.0,
+             "near lead triggers emergency braking");
+
+  input.ego.stamp_sec = 1.2;
+  input.perception_healthy = false;
+  input.detections.clear();
+  const auto held = planner.update(input);
+  expectTrue(held.longitudinal.mode ==
+                 adas::LongitudinalMode::EMERGENCY_BRAKE &&
+                 held.speed_cap_mps == 0.0,
+             "emergency braking remains latched across a dropped track");
 }
 
 void testBaselineFacingDecisionModule() {
@@ -497,6 +529,7 @@ int main() {
   testHighwayRegionPolicy();
   testLaneClassificationHysteresis();
   testInvalidRequestAndStalePerception();
+  testEmergencyBrakeIsLatchedAcrossDroppedTrack();
   testBaselineFacingDecisionModule();
   testUnhealthyPerceptionCannotStartLaneChange();
 

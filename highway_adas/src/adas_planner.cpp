@@ -74,6 +74,7 @@ void AdasPlanner::reset() {
   tracker_.reset();
   lane_change_.reset();
   last_detection_stamp_sec_ = -1.0;
+  emergency_brake_until_sec_ = -1.0;
   current_lane_id_ = -1;
   lane_candidate_id_ = -1;
   lane_candidate_since_sec_ = -1.0;
@@ -203,6 +204,18 @@ AdasOutput AdasPlanner::update(const AdasInput& input) {
       input.ego, *physical_lane, all_tracks, input.cruise_speed_mps);
   if (immediate_hazard.mode == LongitudinalMode::EMERGENCY_BRAKE) {
     longitudinal = immediate_hazard;
+  }
+
+  // Do not release AEB on a single dropped/noisy perception frame. Once an
+  // emergency is observed, zero speed remains authoritative for the hold
+  // interval even if the corresponding track temporarily disappears.
+  if (longitudinal.mode == LongitudinalMode::EMERGENCY_BRAKE) {
+    emergency_brake_until_sec_ = std::max(
+        emergency_brake_until_sec_,
+        input.ego.stamp_sec + config_.emergency_brake_hold_sec);
+  } else if (input.ego.stamp_sec < emergency_brake_until_sec_) {
+    longitudinal.mode = LongitudinalMode::EMERGENCY_BRAKE;
+    longitudinal.speed_cap_mps = 0.0;
   }
 
   const bool perception_fresh = input.perception_healthy &&

@@ -9,7 +9,10 @@ lane_width_m: 3.5
 lane_classification_margin_m: 0.5
 lane_switch_advantage_m: 0.4
 lane_switch_hold_sec: 0.3
-stale_perception_speed_kph: 60.0
+# Fail closed: loss of fresh objects commands a stop instead of resuming cruise.
+stale_perception_speed_kph: 0.0
+# Prevent one dropped object frame from releasing emergency braking.
+emergency_brake_hold_sec: 1.5
 
 lidar_to_base_x_m: 1.144
 lidar_to_base_y_m: 0.0

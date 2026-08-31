@@ -149,6 +149,10 @@ class HighwayAdasNode {
                 stale_perception_speed_kph);
     config.stale_perception_speed_mps =
         std::max(0.0, stale_perception_speed_kph / 3.6);
+    pnh_.param("emergency_brake_hold_sec", config.emergency_brake_hold_sec,
+                config.emergency_brake_hold_sec);
+    config.emergency_brake_hold_sec =
+        std::max(0.0, config.emergency_brake_hold_sec);
 
     pnh_.param("curvature/enabled",
                 config.curvature_speed_limit_enabled,
